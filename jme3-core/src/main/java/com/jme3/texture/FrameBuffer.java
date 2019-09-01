@@ -90,7 +90,7 @@ public class FrameBuffer extends NativeObject {
      * buffer that will be rendered to. <code>RenderBuffer</code>s
      * are attached to an attachment slot on a <code>FrameBuffer</code>.
      */
-    public class RenderBuffer {
+    public static class RenderBuffer {
 
         Texture tex;
         Image.Format format;
@@ -98,7 +98,8 @@ public class FrameBuffer extends NativeObject {
         int slot = SLOT_UNDEF;
         int face = -1;
         int layer = -1;
-        
+        int level = 0;
+
         /**
          * @return The image format of the render buffer.
          */
@@ -119,6 +120,10 @@ public class FrameBuffer extends NativeObject {
          */
         public int getId() {
             return id;
+        }
+
+        public int getLevel() {
+            return this.level;
         }
 
         /**
@@ -167,6 +172,60 @@ public class FrameBuffer extends NativeObject {
         }
     }
 
+    public static class FrameBufferTextureTarget extends RenderBuffer {
+        private FrameBufferTextureTarget(){}
+        void setTexture(Texture tx){
+            this.tex=tx;
+            this.format=tx.getImage().getFormat();
+        }
+
+        void setFormat(Format f){
+            this.format=f;
+        }
+
+        public FrameBufferTextureTarget layer(int i){
+            this.layer=i;
+            return this;
+        }
+
+        public FrameBufferTextureTarget level(int i){
+            this.level=i;
+            return this;
+        }
+
+        public FrameBufferTextureTarget face(TextureCubeMap.Face f){
+            return face(f.ordinal());
+        }
+        
+        public FrameBufferTextureTarget face(int f){
+            this.face=f;
+            return this;
+        }
+
+    }
+
+    public static class FrameBufferBufferTarget extends RenderBuffer {
+        private FrameBufferBufferTarget(){}
+        void setFormat(Format f){
+            this.format=f;
+        }    
+    }
+
+    public static FrameBufferTextureTarget newTarget(Texture tx){
+        FrameBufferTextureTarget t=new FrameBufferTextureTarget();
+        t.setTexture(tx);
+        return t;
+    }
+
+    public static FrameBufferBufferTarget newTarget(Format format){
+        FrameBufferBufferTarget t=new FrameBufferBufferTarget();
+        t.setFormat(format);
+        return t;
+    }
+
+    
+
+
     /**
      * <p>
      * Creates a new FrameBuffer with the given width, height, and number
@@ -207,12 +266,62 @@ public class FrameBuffer extends NativeObject {
          */
     }
 
+
+        
+    public void addColorTarget(FrameBufferBufferTarget colorBuf){
+        colorBuf.slot=colorBufs.size();
+        colorBufs.add(colorBuf);
+    }
+
+    public void addColorTarget(FrameBufferTextureTarget colorBuf){
+        // checkSetTexture(colorBuf.getTexture(), false);  // TODO: this won't work for levels.
+        colorBuf.slot=colorBufs.size();
+        colorBufs.add(colorBuf);
+    }
+       
+    public void setDepthTarget(FrameBufferBufferTarget depthBuf){
+        if (!depthBuf.getFormat().isDepthFormat())
+            throw new IllegalArgumentException("Depth buffer format must be depth.");
+        this.depthBuf = depthBuf;
+        this.depthBuf.slot =  this.depthBuf.getFormat().isDepthStencilFormat() ?  SLOT_DEPTH_STENCIL : SLOT_DEPTH;
+    }
+
+    public void setDepthTarget(FrameBufferTextureTarget depthBuf){
+        checkSetTexture(depthBuf.getTexture(), true);
+        this.depthBuf = depthBuf;
+        this.depthBuf.slot = depthBuf.getTexture().getImage().getFormat().isDepthStencilFormat() ?  SLOT_DEPTH_STENCIL : SLOT_DEPTH;
+    }
+
+    public int getNumColorTargets(){
+        return colorBufs.size();
+    }
+
+    public RenderBuffer getColorTarget(int index){
+        return colorBufs.get(index);
+    }
+
+    public RenderBuffer getColorTarget() {
+        if (colorBufs.isEmpty())
+            return null;
+        if (colorBufIndex<0 || colorBufIndex>=colorBufs.size()) {
+			return colorBufs.get(0);
+		}
+        return colorBufs.get(colorBufIndex);
+    }
+
+    public RenderBuffer getDepthTarget() {
+        return depthBuf;
+    }
+
+
     /**
      * Enables the use of a depth buffer for this <code>FrameBuffer</code>.
      * 
      * @param format The format to use for the depth buffer.
      * @throws IllegalArgumentException If <code>format</code> is not a depth format.
+     * @deprecated Use setDepthTarget
      */
+    @Deprecated
     public void setDepthBuffer(Image.Format format){
         if (id != -1)
             throw new UnsupportedOperationException("FrameBuffer already initialized.");
@@ -230,7 +339,9 @@ public class FrameBuffer extends NativeObject {
      * 
      * @param format The format to use for the color buffer.
      * @throws IllegalArgumentException If <code>format</code> is not a color format.
+     * @deprecated Use addColorTarget
      */
+    @Deprecated
     public void setColorBuffer(Image.Format format){
         if (id != -1)
             throw new UnsupportedOperationException("FrameBuffer already initialized.");
@@ -323,7 +434,9 @@ public class FrameBuffer extends NativeObject {
      * only target.
      * 
      * @param tex The color texture to set.
+     * @deprecated Use addColorTarget
      */
+    @Deprecated
     public void setColorTexture(Texture2D tex){
         clearColorTargets();
         addColorTexture(tex);
@@ -336,7 +449,9 @@ public class FrameBuffer extends NativeObject {
      * only target.
      * 
      * @param tex The color texture array to set.
+     * @deprecated Use addColorTarget
      */
+    @Deprecated
     public void setColorTexture(TextureArray tex, int layer){
         clearColorTargets();
         addColorTexture(tex, layer);
@@ -350,7 +465,9 @@ public class FrameBuffer extends NativeObject {
      *
      * @param tex The cube-map texture to set.
      * @param face The face of the cube-map to render to.
+     * @deprecated Use addColorTarget
      */
+    @Deprecated
     public void setColorTexture(TextureCubeMap tex, TextureCubeMap.Face face) {
         clearColorTargets();
         addColorTexture(tex, face);
@@ -372,7 +489,9 @@ public class FrameBuffer extends NativeObject {
      * 
      * @param format the format of the color buffer
 	 * @see #addColorTexture(com.jme3.texture.Texture2D) 
+     * @deprecated Use addColorTarget
      */
+    @Deprecated
 	public void addColorBuffer(Image.Format format){
         if (id != -1)
             throw new UnsupportedOperationException("FrameBuffer already initialized.");
@@ -386,7 +505,9 @@ public class FrameBuffer extends NativeObject {
         
         colorBufs.add(colorBuf);
     }
-	
+
+
+
     /**
      * Add a color texture to use for this framebuffer.
      * If MRT is enabled, then each subsequently added texture can be
@@ -396,7 +517,10 @@ public class FrameBuffer extends NativeObject {
      * 
      * @param tex The texture to add.
 	 * @see #addColorBuffer(com.jme3.texture.Image.Format) 
+     * @deprecated Use addColorTarget
+     * 
      */
+    @Deprecated
     public void addColorTexture(Texture2D tex) {
         if (id != -1)
             throw new UnsupportedOperationException("FrameBuffer already initialized.");
@@ -420,7 +544,9 @@ public class FrameBuffer extends NativeObject {
      * is rendered to by the shader.
      * 
      * @param tex The texture array to add.
+     * @deprecated Use addColorTarget
      */
+    @Deprecated
     public void addColorTexture(TextureArray tex, int layer) {
         if (id != -1)
             throw new UnsupportedOperationException("FrameBuffer already initialized.");
@@ -446,7 +572,9 @@ public class FrameBuffer extends NativeObject {
      *
      * @param tex The cube-map texture to add.
      * @param face The face of the cube-map to render to.
+     * @deprecated Use addColorTarget
      */
+    @Deprecated
     public void addColorTexture(TextureCubeMap tex, TextureCubeMap.Face face) {
         if (id != -1)
             throw new UnsupportedOperationException("FrameBuffer already initialized.");
@@ -467,7 +595,9 @@ public class FrameBuffer extends NativeObject {
      * Set the depth texture to use for this framebuffer.
      * 
      * @param tex The color texture to set.
+     * @deprecated Use setDepthTarget
      */
+    @Deprecated
     public void setDepthTexture(Texture2D tex){
         if (id != -1)
             throw new UnsupportedOperationException("FrameBuffer already initialized.");
@@ -480,6 +610,15 @@ public class FrameBuffer extends NativeObject {
         depthBuf.tex = tex;
         depthBuf.format = img.getFormat();
     }
+
+    
+    /**
+     * 
+     * @param tex
+     * @param layer
+     * @deprecated Use setDepthTarget
+     */
+    @Deprecated
     public void setDepthTexture(TextureArray tex, int layer){
         if (id != -1)
             throw new UnsupportedOperationException("FrameBuffer already initialized.");
@@ -496,7 +635,9 @@ public class FrameBuffer extends NativeObject {
     
     /**
      * @return The number of color buffers attached to this texture. 
+     * @deprecated Use getNumColorTargets
      */
+    @Deprecated
     public int getNumColorBuffers(){
         return colorBufs.size();
     }
@@ -504,7 +645,9 @@ public class FrameBuffer extends NativeObject {
     /**
      * @param index
      * @return The color buffer at the given index.
+     * @deprecated Use getColorTarget(int)
      */
+    @Deprecated
     public RenderBuffer getColorBuffer(int index){
         return colorBufs.get(index);
     }
@@ -513,7 +656,9 @@ public class FrameBuffer extends NativeObject {
      * @return The color buffer with the index set by {@link #setTargetIndex(int)}, or null
      * if no color buffers are attached.
 	 * If MRT is disabled, the first color buffer is returned.
+     * @deprecated Use getColorTarget()
      */
+    @Deprecated
     public RenderBuffer getColorBuffer() {
         if (colorBufs.isEmpty())
             return null;
@@ -526,7 +671,9 @@ public class FrameBuffer extends NativeObject {
     /**
      * @return The depth buffer attached to this FrameBuffer, or null
      * if no depth buffer is attached
+     * @deprecated Use getDepthTarget()
      */
+    @Deprecated
     public RenderBuffer getDepthBuffer() {
         return depthBuf;
     }
