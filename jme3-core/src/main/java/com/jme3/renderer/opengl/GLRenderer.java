@@ -2143,6 +2143,11 @@ public final class GLRenderer implements Renderer {
     }
 
     @Override
+    public FrameBuffer getFrameBuffer(){
+        return context.boundFB;
+    }
+
+    @Override
     public void readFrameBuffer(FrameBuffer fb, ByteBuffer byteBuf) {
         readFrameBufferWithGLFormat(fb, byteBuf, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE);
     }

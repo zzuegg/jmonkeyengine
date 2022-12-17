@@ -159,6 +159,9 @@ public class NullRenderer implements Renderer {
     }
 
     @Override
+    public FrameBuffer getFrameBuffer(){ return null; }
+
+    @Override
     public void readFrameBuffer(FrameBuffer fb, ByteBuffer byteBuf) {
     }
 

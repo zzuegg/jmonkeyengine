@@ -226,6 +226,12 @@ public interface Renderer {
     public void setFrameBuffer(FrameBuffer fb);
 
     /**
+     * Returns the framebuffer currently used
+     * @return
+     */
+    public FrameBuffer getFrameBuffer();
+
+    /**
      * Sets the framebuffer that will be set instead of the main framebuffer
      * when a call to setFrameBuffer(null) is made.
      *
