@@ -603,4 +603,27 @@ public interface Renderer {
      * Registers a NativeObject to be cleaned up by this renderer.
      */
     public void registerNativeObject(NativeObject nativeObject);
+
+    /**
+     * Enables or disables the use of bindless textures.
+     * When enabled and supported ({@link Caps#BindlessTexture}), texture handles
+     * are passed directly to shaders instead of binding textures to texture units.
+     * This reduces CPU overhead from state changes and removes the texture unit limit.
+     *
+     * <p>Disabled by default. Has no effect if the hardware does not support
+     * {@code GL_ARB_bindless_texture}.
+     *
+     * @param enabled true to enable bindless textures, false to use traditional binding.
+     */
+    public default void setBindlessTextureEnabled(boolean enabled) {
+    }
+
+    /**
+     * Returns whether bindless textures are currently enabled.
+     *
+     * @return true if bindless textures are enabled.
+     */
+    public default boolean isBindlessTextureEnabled() {
+        return false;
+    }
 }

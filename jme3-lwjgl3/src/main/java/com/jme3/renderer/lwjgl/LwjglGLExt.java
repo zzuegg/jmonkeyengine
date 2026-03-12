@@ -33,6 +33,7 @@ package com.jme3.renderer.lwjgl;
 
 import com.jme3.renderer.opengl.GLExt;
 import org.lwjgl.opengl.*;
+import org.lwjgl.opengl.ARBBindlessTexture;
 
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
@@ -117,5 +118,60 @@ public class LwjglGLExt extends LwjglRender implements GLExt {
     public void glObjectLabel(int identifier, int id, String label) {
         assert label != null;
         KHRDebug.glObjectLabel(identifier, id, label);
+    }
+
+    @Override
+    public long glGetTextureHandleARB(final int texture) {
+        return ARBBindlessTexture.glGetTextureHandleARB(texture);
+    }
+
+    @Override
+    public void glMakeTextureHandleResidentARB(final long handle) {
+        ARBBindlessTexture.glMakeTextureHandleResidentARB(handle);
+    }
+
+    @Override
+    public void glMakeTextureHandleNonResidentARB(final long handle) {
+        ARBBindlessTexture.glMakeTextureHandleNonResidentARB(handle);
+    }
+
+    @Override
+    public void glUniformHandleui64ARB(final int location, final long value) {
+        ARBBindlessTexture.glUniformHandleui64ARB(location, value);
+    }
+
+    @Override
+    public boolean glIsTextureHandleResidentARB(final long handle) {
+        return ARBBindlessTexture.glIsTextureHandleResidentARB(handle);
+    }
+
+    @Override
+    public long glGetTextureSamplerHandleARB(final int texture, final int sampler) {
+        return ARBBindlessTexture.glGetTextureSamplerHandleARB(texture, sampler);
+    }
+
+    @Override
+    public int glGenSamplers() {
+        return GL33.glGenSamplers();
+    }
+
+    @Override
+    public void glDeleteSamplers(final int sampler) {
+        GL33.glDeleteSamplers(sampler);
+    }
+
+    @Override
+    public void glSamplerParameteri(final int sampler, final int pname, final int param) {
+        GL33.glSamplerParameteri(sampler, pname, param);
+    }
+
+    @Override
+    public void glSamplerParameterf(final int sampler, final int pname, final float param) {
+        GL33.glSamplerParameterf(sampler, pname, param);
+    }
+
+    @Override
+    public void glBindSampler(final int unit, final int sampler) {
+        GL33.glBindSampler(unit, sampler);
     }
 }

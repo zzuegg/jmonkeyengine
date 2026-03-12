@@ -482,7 +482,18 @@ public enum Caps {
      * Core in OpenGL 4.6. Enables {@code glMultiDrawElementsIndirectCount}
      * and {@code glMultiDrawArraysIndirectCount}.
      */
-    MultiDrawIndirectCount
+    MultiDrawIndirectCount,
+
+    /**
+     * Supports bindless textures (GL_ARB_bindless_texture).
+     *
+     * <p>When available, texture handles can be passed directly to shaders
+     * instead of binding textures to texture units, removing the texture
+     * unit limit and reducing CPU overhead from state changes.
+     *
+     * <p>Not supported on Intel iGPUs, macOS, or OpenGL ES.
+     */
+    BindlessTexture
     ;
 
     /**

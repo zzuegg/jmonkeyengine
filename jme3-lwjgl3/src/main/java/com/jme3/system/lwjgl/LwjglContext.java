@@ -258,6 +258,7 @@ public abstract class LwjglContext implements JmeContext {
 
         this.renderer.setMainFrameBufferSrgb(settings.isGammaCorrection());
         this.renderer.setLinearizeSrgbImages(settings.isGammaCorrection());
+        this.renderer.setBindlessTextureEnabled(settings.isBindlessTextures());
 
         if (first) {
             // Init input

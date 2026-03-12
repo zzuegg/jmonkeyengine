@@ -260,6 +260,125 @@ public interface GLExt {
      */
     public void glVertexAttribDivisorARB(int index, int divisor);
 
+    // ARB_bindless_texture
+
+    /**
+     * Obtains a 64-bit handle for a texture object. The handle can be made resident
+     * and passed to shaders to access the texture without binding it to a texture unit.
+     *
+     * @param texture the texture object ID.
+     * @return the 64-bit texture handle.
+     */
+    public default long glGetTextureHandleARB(int texture) {
+        throw new UnsupportedOperationException("Bindless textures not supported");
+    }
+
+    /**
+     * Makes a texture handle resident, allowing it to be accessed by shaders.
+     * A resident texture handle consumes GPU resources and must be made non-resident
+     * before the texture is deleted.
+     *
+     * @param handle the texture handle to make resident.
+     */
+    public default void glMakeTextureHandleResidentARB(long handle) {
+        throw new UnsupportedOperationException("Bindless textures not supported");
+    }
+
+    /**
+     * Makes a texture handle non-resident. Must be called before deleting the texture.
+     *
+     * @param handle the texture handle to make non-resident.
+     */
+    public default void glMakeTextureHandleNonResidentARB(long handle) {
+        throw new UnsupportedOperationException("Bindless textures not supported");
+    }
+
+    /**
+     * Sets a sampler uniform to a bindless texture handle.
+     *
+     * @param location the uniform location.
+     * @param value the 64-bit texture handle.
+     */
+    public default void glUniformHandleui64ARB(int location, long value) {
+        throw new UnsupportedOperationException("Bindless textures not supported");
+    }
+
+    /**
+     * Obtains a 64-bit handle for a texture object combined with a separate
+     * sampler object. This allows using different sampler parameters without
+     * modifying the texture object itself (which is forbidden once a handle
+     * exists).
+     *
+     * @param texture the texture object ID.
+     * @param sampler the sampler object ID.
+     * @return the 64-bit texture handle.
+     */
+    public default long glGetTextureSamplerHandleARB(int texture, int sampler) {
+        throw new UnsupportedOperationException("Bindless textures not supported");
+    }
+
+    /**
+     * Queries whether a texture handle is currently resident.
+     *
+     * @param handle the texture handle to query.
+     * @return true if the handle is resident.
+     */
+    public default boolean glIsTextureHandleResidentARB(long handle) {
+        throw new UnsupportedOperationException("Bindless textures not supported");
+    }
+
+    /**
+     * Generates a sampler object name.
+     *
+     * @return the generated sampler object name.
+     */
+    public default int glGenSamplers() {
+        throw new UnsupportedOperationException("Sampler objects not supported");
+    }
+
+    /**
+     * Deletes a sampler object.
+     *
+     * @param sampler the sampler object to delete.
+     */
+    public default void glDeleteSamplers(int sampler) {
+        throw new UnsupportedOperationException("Sampler objects not supported");
+    }
+
+    /**
+     * Sets an integer parameter on a sampler object.
+     *
+     * @param sampler the sampler object.
+     * @param pname the parameter name.
+     * @param param the parameter value.
+     */
+    public default void glSamplerParameteri(int sampler, int pname, int param) {
+        throw new UnsupportedOperationException("Sampler objects not supported");
+    }
+
+    /**
+     * Sets a float parameter on a sampler object.
+     *
+     * @param sampler the sampler object.
+     * @param pname the parameter name.
+     * @param param the parameter value.
+     */
+    public default void glSamplerParameterf(int sampler, int pname, float param) {
+        throw new UnsupportedOperationException("Sampler objects not supported");
+    }
+
+    /**
+     * Binds a sampler object to a texture unit. The sampler's parameters
+     * override the texture's embedded sampler state for that unit.
+     * Passing 0 unbinds any sampler from the unit.
+     *
+     * @param unit the texture unit index.
+     * @param sampler the sampler object, or 0 to unbind.
+     */
+    public default void glBindSampler(int unit, int sampler) {
+        throw new UnsupportedOperationException("Sampler objects not supported");
+    }
+
     public default void glPushDebugGroup(int source, int id, String message) {
     }
 
