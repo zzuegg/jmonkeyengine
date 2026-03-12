@@ -255,4 +255,97 @@ public class VertexBufferMultiSlotRendererTest {
         assertEquals(0, call[2]);  // stride 0 (tightly packed)
         assertEquals(0, call[3]);  // offset 0
     }
+
+    @Test
+    public void testTwoMultiSlotBuffersBoundSimultaneously() {
+        // Bind TexCoord2 (8 components) at loc 5 and TexCoord3 (12 components) at loc 10
+        VertexBuffer tc2 = createVB(Type.TexCoord2, 8, 5);
+        VertexBuffer tc3 = createVB(Type.TexCoord3, 12, 10);
+
+        renderer.setVertexAttrib(tc2, null);
+        renderer.setVertexAttrib(tc3, null);
+
+        // tc2: 2 slots at 5,6; tc3: 3 slots at 10,11,12 = 5 total calls
+        assertEquals(5, attribPointerCalls.size());
+
+        // Verify tc2 slots
+        assertEquals(5, attribPointerCalls.get(0)[0]);
+        assertEquals(6, attribPointerCalls.get(1)[0]);
+
+        // Verify tc3 slots
+        assertEquals(10, attribPointerCalls.get(2)[0]);
+        assertEquals(11, attribPointerCalls.get(3)[0]);
+        assertEquals(12, attribPointerCalls.get(4)[0]);
+
+        // tc3 stride should be 4*4*3=48 (3 slots)
+        for (int i = 2; i < 5; i++) {
+            assertEquals(48, attribPointerCalls.get(i)[2]);
+        }
+
+        // Verify all 5 attribute arrays were enabled
+        verify(gl).glEnableVertexAttribArray(5);
+        verify(gl).glEnableVertexAttribArray(6);
+        verify(gl).glEnableVertexAttribArray(10);
+        verify(gl).glEnableVertexAttribArray(11);
+        verify(gl).glEnableVertexAttribArray(12);
+    }
+
+    @Test
+    public void testClearVertexAttribs_disablesAllMultiSlots() {
+        // Bind an instanced 8-component buffer, then clear
+        VertexBuffer vb = createVB(Type.TexCoord2, 8, 5);
+        vb.setInstanced(true);
+
+        renderer.setVertexAttrib(vb, null);
+
+        // clearVertexAttribs moves the "new" list to "old" — we need to
+        // call it once to populate oldList, then again to trigger cleanup.
+        // First call: copies new -> old (slots 5,6 are now in old list)
+        renderer.clearVertexAttribs();
+        // Second call: old list has 5,6, new list is empty -> disables them
+        renderer.clearVertexAttribs();
+
+        // Both slots should have been disabled
+        verify(gl).glDisableVertexAttribArray(5);
+        verify(gl).glDisableVertexAttribArray(6);
+
+        // Both instanced slots should have had their divisor reset to 0
+        // (first 2 calls set divisor=1, next 2 reset to 0)
+        verify(glext, times(2)).glVertexAttribDivisorARB(eq(5), anyInt());
+        verify(glext, times(2)).glVertexAttribDivisorARB(eq(6), anyInt());
+
+        // Verify the reset calls specifically
+        verify(glext).glVertexAttribDivisorARB(5, 0);
+        verify(glext).glVertexAttribDivisorARB(6, 0);
+    }
+
+    @Test
+    public void testMultiSlotInstancedToNonInstanced() {
+        // Bind an instanced 8-component TexCoord2, then rebind the same
+        // type as non-instanced — divisor should be reset to 0 on all slots
+        VertexBuffer instancedVB = createVB(Type.TexCoord2, 8, 5);
+        instancedVB.setInstanced(true);
+        renderer.setVertexAttrib(instancedVB, null);
+
+        divisorCalls.clear();
+        attribPointerCalls.clear();
+
+        // Now bind a non-instanced buffer at the same location
+        // We need a different VB object so the renderer detects the change
+        VertexBuffer nonInstancedVB = new VertexBuffer(Type.TexCoord2);
+        FloatBuffer fb = BufferUtils.createFloatBuffer(3 * 8);
+        nonInstancedVB.setupData(Usage.Static, 8, Format.Float, fb);
+        // Reuse the same shader attribute location
+        renderer.setVertexAttrib(nonInstancedVB, null);
+
+        // Should have 2 glVertexAttribPointer calls for the new binding
+        assertEquals(2, attribPointerCalls.size());
+
+        // Divisor should be reset to 0 on both slots
+        assertEquals(2, divisorCalls.size());
+        assertEquals(5, divisorCalls.get(0)[0]);
+        assertEquals(0, divisorCalls.get(0)[1]);
+        assertEquals(6, divisorCalls.get(1)[0]);
+        assertEquals(0, divisorCalls.get(1)[1]);
+    }
 }
