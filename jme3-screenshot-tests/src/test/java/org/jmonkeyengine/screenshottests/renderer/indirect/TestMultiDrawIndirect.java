@@ -104,7 +104,7 @@ public class TestMultiDrawIndirect extends ScreenshotTestBase {
                     Transform sphereTransform = new Transform(new Vector3f(3, 0, 0));
                     Transform monkeyTransform = new Transform(new Vector3f(0, 0, 0));
 
-                    MeshCombiner.CombinedMesh combined = MeshCombiner.combine(
+                    MeshCombiner.CombinedMesh combined = MeshCombiner.combineWithTransforms(
                             new MeshCombiner.Entry(boxMesh, boxTransform),
                             new MeshCombiner.Entry(sphereMesh, sphereTransform),
                             new MeshCombiner.Entry(monkeyMesh, monkeyTransform)

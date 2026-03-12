@@ -2,6 +2,7 @@ MaterialDef MdiBindless {
 
     MaterialParameters {
         ShaderStorageBufferObject TextureHandles
+        ShaderStorageBufferObject DrawTransforms
     }
 
     Technique {
@@ -9,7 +10,7 @@ MaterialDef MdiBindless {
         FragmentShader GLSL460 : ScreenshotTests/Shaders/MdiBindless.frag
 
         WorldParameters {
-            WorldViewProjectionMatrix
+            ViewProjectionMatrix
         }
     }
 }
