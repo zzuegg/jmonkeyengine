@@ -3084,23 +3084,11 @@ public final class GLRenderer implements Renderer {
     /**
      * Maps a BufferObject's BufferType to the corresponding GL target constant.
      */
-    private int resolveBufferTarget(BufferObject.BufferType bufferType) {
-        switch (bufferType) {
-            case ShaderStorageBuffer:
-                return GL4.GL_SHADER_STORAGE_BUFFER;
-            case DrawIndirectBuffer:
-                return GL4.GL_DRAW_INDIRECT_BUFFER;
-            case ParameterBuffer:
-                return GL4.GL_PARAMETER_BUFFER;
-            default:
-                throw new RendererException("Unknown BufferType: " + bufferType);
-        }
-    }
-
     private void bindDrawIndirectBuffer(BufferObject bo) {
         int target = GL4.GL_DRAW_INDIRECT_BUFFER;
         if (bo.isUpdateNeeded()) {
             updateBufferData(target, bo);
+            context.boundDrawIndirectBuffer = 0; // updateBufferData unbinds
         }
         int bufferId = bo.getId();
         if (context.boundDrawIndirectBuffer != bufferId) {
@@ -3113,6 +3101,7 @@ public final class GLRenderer implements Renderer {
         int target = GL4.GL_PARAMETER_BUFFER;
         if (bo.isUpdateNeeded()) {
             updateBufferData(target, bo);
+            context.boundParameterBuffer = 0; // updateBufferData unbinds
         }
         int bufferId = bo.getId();
         if (context.boundParameterBuffer != bufferId) {
@@ -3171,6 +3160,8 @@ public final class GLRenderer implements Renderer {
 
     @Override
     public void renderMeshIndirect(Mesh mesh, BufferObject commandBuffer, long byteOffset) {
+        if (mesh == null) throw new IllegalArgumentException("mesh must not be null");
+        if (commandBuffer == null) throw new IllegalArgumentException("commandBuffer must not be null");
         if (!caps.contains(Caps.MultiDrawIndirect)) {
             throw new RendererException("Multi-draw indirect not supported by the video hardware");
         }
@@ -3195,6 +3186,8 @@ public final class GLRenderer implements Renderer {
 
     @Override
     public void renderMeshMultiIndirect(Mesh mesh, BufferObject commandBuffer, int drawCount, long byteOffset) {
+        if (mesh == null) throw new IllegalArgumentException("mesh must not be null");
+        if (commandBuffer == null) throw new IllegalArgumentException("commandBuffer must not be null");
         if (!caps.contains(Caps.MultiDrawIndirect)) {
             throw new RendererException("Multi-draw indirect not supported by the video hardware");
         }
@@ -3219,6 +3212,9 @@ public final class GLRenderer implements Renderer {
     @Override
     public void renderMeshMultiIndirectCount(Mesh mesh, BufferObject commandBuffer,
             BufferObject countBuffer, int maxDrawCount, long byteOffset) {
+        if (mesh == null) throw new IllegalArgumentException("mesh must not be null");
+        if (commandBuffer == null) throw new IllegalArgumentException("commandBuffer must not be null");
+        if (countBuffer == null) throw new IllegalArgumentException("countBuffer must not be null");
         if (!caps.contains(Caps.MultiDrawIndirectCount)) {
             throw new RendererException("Multi-draw indirect count not supported by the video hardware");
         }

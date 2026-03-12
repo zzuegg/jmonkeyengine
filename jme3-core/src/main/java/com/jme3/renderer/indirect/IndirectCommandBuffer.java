@@ -135,13 +135,13 @@ public class IndirectCommandBuffer {
     }
 
     /**
-     * Replaces all commands with the given list.
+     * Replaces all commands with the given list of elements draw commands.
      *
      * @param cmds the commands to set
      * @return this buffer for chaining
      * @throws IllegalArgumentException if drawType is not Elements
      */
-    public IndirectCommandBuffer setCommands(List<DrawElementsIndirectCommand> cmds) {
+    public IndirectCommandBuffer setElementsCommands(List<DrawElementsIndirectCommand> cmds) {
         if (drawType != DrawType.Elements) {
             throw new IllegalArgumentException("Cannot set DrawElementsIndirectCommand list on a DrawType.Arrays buffer");
         }
@@ -163,6 +163,33 @@ public class IndirectCommandBuffer {
     }
 
     /**
+     * Replaces all commands with the given list of array draw commands.
+     *
+     * @param cmds the commands to set
+     * @return this buffer for chaining
+     * @throws IllegalArgumentException if drawType is not Arrays
+     */
+    public IndirectCommandBuffer setArraysCommands(List<DrawArraysIndirectCommand> cmds) {
+        if (drawType != DrawType.Arrays) {
+            throw new IllegalArgumentException("Cannot set DrawArraysIndirectCommand list on a DrawType.Elements buffer");
+        }
+        commandCount = 0;
+        int totalBytes = cmds.size() * DrawArraysIndirectCommand.STRIDE;
+        if (cpuBuffer != null) {
+            BufferUtils.destroyDirectBuffer(cpuBuffer);
+        }
+        cpuBuffer = BufferUtils.createByteBuffer(totalBytes);
+        for (DrawArraysIndirectCommand cmd : cmds) {
+            cpuBuffer.putInt(cmd.count);
+            cpuBuffer.putInt(cmd.instanceCount);
+            cpuBuffer.putInt(cmd.first);
+            cpuBuffer.putInt(cmd.baseInstance);
+            commandCount++;
+        }
+        return this;
+    }
+
+    /**
      * Pre-allocate space for a given number of commands.
      * Used for GPU-driven rendering where a compute shader writes the commands.
      *
@@ -170,6 +197,10 @@ public class IndirectCommandBuffer {
      * @return this buffer for chaining
      */
     public IndirectCommandBuffer allocate(int maxCommands) {
+        if (cpuBuffer != null) {
+            BufferUtils.destroyDirectBuffer(cpuBuffer);
+            cpuBuffer = null;
+        }
         int stride = (drawType == DrawType.Elements)
                 ? DrawElementsIndirectCommand.STRIDE
                 : DrawArraysIndirectCommand.STRIDE;
@@ -182,7 +213,7 @@ public class IndirectCommandBuffer {
     /**
      * Transfers the CPU-side command data to the underlying BufferObject and
      * marks it for upload to the GPU. Call this after adding commands via
-     * {@link #addCommand} or {@link #setCommands}.
+     * {@link #addCommand} or {@link #setElementsCommands}/{@link #setArraysCommands}.
      */
     public void update() {
         if (cpuBuffer != null) {
