@@ -36,6 +36,7 @@ import com.jme3.app.SimpleApplication;
 import com.jme3.app.state.BaseAppState;
 import com.jme3.material.Material;
 import com.jme3.math.ColorRGBA;
+import com.jme3.math.Transform;
 import com.jme3.math.Vector3f;
 import com.jme3.post.SceneProcessor;
 import com.jme3.profile.AppProfiler;
@@ -43,31 +44,28 @@ import com.jme3.renderer.Caps;
 import com.jme3.renderer.RenderManager;
 import com.jme3.renderer.Renderer;
 import com.jme3.renderer.ViewPort;
-import com.jme3.renderer.indirect.DrawElementsIndirectCommand;
 import com.jme3.renderer.indirect.IndirectCommandBuffer;
+import com.jme3.renderer.indirect.MeshCombiner;
 import com.jme3.renderer.queue.RenderQueue;
 import com.jme3.scene.Geometry;
 import com.jme3.scene.Mesh;
+import com.jme3.scene.Spatial;
 import com.jme3.scene.shape.Box;
-import com.jme3.shader.bufferobject.BufferObject;
+import com.jme3.scene.shape.Sphere;
 import com.jme3.texture.FrameBuffer;
 import org.jmonkeyengine.screenshottests.testframework.ScreenshotTestBase;
 import org.junit.jupiter.api.Test;
 
 /**
- * End-to-end rendering test for indirect draw commands.
+ * End-to-end rendering test for multi-draw indirect commands.
  * <p>
- * Uses a {@link SceneProcessor} to intercept rendering after the queue is built
- * but before it is flushed. The processor uses {@code renderGeometry} to set up
- * all GL state (shader, uniforms, vertex attribs), then clears the framebuffer
- * to remove the normal render output, and finally calls
- * {@code renderer.renderMeshIndirect()} to issue the draw via the indirect
- * command buffer. The render queue is then cleared so {@code flushQueue} has
- * nothing to render.
+ * Combines a box, sphere, and monkey head into a single mesh using
+ * {@link MeshCombiner}, then renders all three objects in one
+ * {@code renderMeshMultiIndirect} call with 3 draw commands.
  * <p>
- * If indirect drawing works correctly, the box drawn by the indirect call is
- * visible and the screenshot matches the reference image. If it is broken, the
- * screenshot is empty and the test fails.
+ * Uses a {@link SceneProcessor} to intercept rendering: establishes GL state
+ * via {@code renderGeometry}, clears the framebuffer, then issues the multi-draw
+ * indirect call as the only visible output.
  */
 public class TestMultiDrawIndirect extends ScreenshotTestBase {
 
@@ -80,37 +78,57 @@ public class TestMultiDrawIndirect extends ScreenshotTestBase {
                     SimpleApplication simpleApp = (SimpleApplication) app;
 
                     if (!app.getRenderer().getCaps().contains(Caps.MultiDrawIndirect)) {
-                        // Skip gracefully on hardware without MDI support
                         return;
                     }
 
-                    // Camera setup
-                    app.getCamera().setLocation(new Vector3f(0, 3, 8));
+                    // Camera setup — pulled back to see all three objects
+                    app.getCamera().setLocation(new Vector3f(0, 2, 10));
                     app.getCamera().lookAt(Vector3f.ZERO, Vector3f.UNIT_Y);
 
-                    // Mesh and material
-                    Box box = new Box(1, 1, 1);
+                    // Create three different meshes
+                    Box boxMesh = new Box(0.8f, 0.8f, 0.8f);
+                    Sphere sphereMesh = new Sphere(16, 16, 1f);
+                    Spatial monkeyModel = app.getAssetManager()
+                            .loadModel("Models/MonkeyHead/MonkeyHead.mesh.xml");
+                    // MonkeyHead loads as a Node — find the first Geometry child
+                    Mesh monkeyMesh;
+                    if (monkeyModel instanceof Geometry) {
+                        monkeyMesh = ((Geometry) monkeyModel).getMesh();
+                    } else {
+                        monkeyMesh = ((Geometry) ((com.jme3.scene.Node) monkeyModel)
+                                .getChild(0)).getMesh();
+                    }
+
+                    // Combine all three into one mesh with transforms for positioning
+                    Transform boxTransform = new Transform(new Vector3f(-3, 0, 0));
+                    Transform sphereTransform = new Transform(new Vector3f(3, 0, 0));
+                    Transform monkeyTransform = new Transform(new Vector3f(0, 0, 0));
+
+                    MeshCombiner.CombinedMesh combined = MeshCombiner.combine(
+                            new MeshCombiner.Entry(boxMesh, boxTransform),
+                            new MeshCombiner.Entry(sphereMesh, sphereTransform),
+                            new MeshCombiner.Entry(monkeyMesh, monkeyTransform)
+                    );
+
+                    Mesh combinedMesh = combined.getMesh();
+
+                    // Build indirect command buffer — one draw command per sub-mesh
+                    IndirectCommandBuffer cmdBuf = combined.toCommandBuffer();
+                    cmdBuf.update();
+
+                    // Material for state setup
                     Material mat = new Material(app.getAssetManager(),
                             "Common/MatDefs/Misc/Unshaded.j3md");
                     mat.setColor("Color", ColorRGBA.Blue);
 
-                    // Geometry for state setup — must be in the scene graph
-                    // so updateGeometricState populates world transforms
-                    Geometry geom = new Geometry("IndirectBox", box);
+                    // Geometry for GL state setup — uses the combined mesh
+                    Geometry geom = new Geometry("CombinedIndirect", combinedMesh);
                     geom.setMaterial(mat);
                     simpleApp.getRootNode().attachChild(geom);
 
-                    // Build indirect command buffer: one draw command for
-                    // the box's 36 indices, 1 instance
-                    IndirectCommandBuffer cmdBuf = new IndirectCommandBuffer(
-                            IndirectCommandBuffer.DrawType.Elements);
-                    cmdBuf.addCommand(new DrawElementsIndirectCommand(36, 1, 0, 0, 0));
-                    cmdBuf.update();
+                    // Capture references for the processor
+                    final IndirectCommandBuffer finalCmdBuf = cmdBuf;
 
-                    BufferObject commandBuffer = cmdBuf.getBufferObject();
-                    Mesh mesh = box;
-
-                    // Add a SceneProcessor that intercepts rendering
                     simpleApp.getViewPort().addProcessor(new SceneProcessor() {
                         private boolean initialized = false;
                         private RenderManager rm;
@@ -122,70 +140,54 @@ public class TestMultiDrawIndirect extends ScreenshotTestBase {
                         }
 
                         @Override
-                        public void reshape(ViewPort vp, int w, int h) {
-                        }
+                        public void reshape(ViewPort vp, int w, int h) {}
 
                         @Override
-                        public boolean isInitialized() {
-                            return initialized;
-                        }
+                        public boolean isInitialized() { return initialized; }
 
                         @Override
-                        public void preFrame(float tpf) {
-                        }
+                        public void preFrame(float tpf) {}
 
                         @Override
                         public void postQueue(RenderQueue rq) {
                             Renderer renderer = rm.getRenderer();
 
-                            // Step 1: Use renderGeometry to establish all GL
-                            // state: shader program, uniforms, render state.
-                            // This renders the geometry normally as a side
-                            // effect.
+                            // Establish GL state (shader, uniforms, render state)
                             rm.renderGeometry(geom);
 
-                            // Step 2: Clear the framebuffer to remove the
-                            // normal render output. Only the indirect draw
-                            // that follows will be visible.
+                            // Clear framebuffer — only the indirect draw will be visible
                             renderer.clearBuffers(true, true, true);
 
-                            // Step 3: Issue the indirect draw call. This
-                            // re-sets vertex attribs via setupMeshVertexAttribs
-                            // internally, binds the indirect buffer, and
-                            // issues the GL draw.
-                            renderer.renderMeshIndirect(mesh, commandBuffer, 0);
+                            // Issue multi-draw indirect: 3 objects in 1 call
+                            renderer.renderMeshMultiIndirect(
+                                    combinedMesh,
+                                    finalCmdBuf.getBufferObject(),
+                                    finalCmdBuf.getCommandCount(),
+                                    0);
 
-                            // Step 4: Clear the render queue so flushQueue
-                            // has nothing to render — only our indirect
-                            // draw output remains.
+                            // Clear queue so flushQueue renders nothing
                             rq.clear();
                         }
 
                         @Override
-                        public void postFrame(FrameBuffer out) {
-                        }
+                        public void postFrame(FrameBuffer out) {}
 
                         @Override
-                        public void cleanup() {
-                        }
+                        public void cleanup() {}
 
                         @Override
-                        public void setProfiler(AppProfiler profiler) {
-                        }
+                        public void setProfiler(AppProfiler profiler) {}
                     });
                 }
 
                 @Override
-                protected void cleanup(Application app) {
-                }
+                protected void cleanup(Application app) {}
 
                 @Override
-                protected void onEnable() {
-                }
+                protected void onEnable() {}
 
                 @Override
-                protected void onDisable() {
-                }
+                protected void onDisable() {}
             }
         )
         .setFramesToTakeScreenshotsOn(2)
