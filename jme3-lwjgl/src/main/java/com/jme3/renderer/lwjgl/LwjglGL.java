@@ -660,4 +660,34 @@ public final class LwjglGL implements GL, GL2, GL3, GL4 {
     public void glUniformBlockBinding(final int program, final int uniformBlockIndex, final int uniformBlockBinding) {
         GL31.glUniformBlockBinding(program, uniformBlockIndex, uniformBlockBinding);
     }
+
+    @Override
+    public void glDrawElementsIndirect(int mode, int type, long indirect) {
+        throw new UnsupportedOperationException("glDrawElementsIndirect is not supported by the legacy LWJGL2 renderer");
+    }
+
+    @Override
+    public void glDrawArraysIndirect(int mode, long indirect) {
+        throw new UnsupportedOperationException("glDrawArraysIndirect is not supported by the legacy LWJGL2 renderer");
+    }
+
+    @Override
+    public void glMultiDrawElementsIndirect(int mode, int type, long indirect, int drawCount, int stride) {
+        throw new UnsupportedOperationException("glMultiDrawElementsIndirect is not supported by the legacy LWJGL2 renderer");
+    }
+
+    @Override
+    public void glMultiDrawArraysIndirect(int mode, long indirect, int drawCount, int stride) {
+        throw new UnsupportedOperationException("glMultiDrawArraysIndirect is not supported by the legacy LWJGL2 renderer");
+    }
+
+    @Override
+    public void glMultiDrawElementsIndirectCount(int mode, int type, long indirect, long drawCount, int maxDrawCount, int stride) {
+        throw new UnsupportedOperationException("glMultiDrawElementsIndirectCount is not supported by the legacy LWJGL2 renderer");
+    }
+
+    @Override
+    public void glMultiDrawArraysIndirectCount(int mode, long indirect, long drawCount, int maxDrawCount, int stride) {
+        throw new UnsupportedOperationException("glMultiDrawArraysIndirectCount is not supported by the legacy LWJGL2 renderer");
+    }
 }
