@@ -3081,6 +3081,166 @@ public final class GLRenderer implements Renderer {
         bo.clearUpdateNeeded();
     }
 
+    /**
+     * Maps a BufferObject's BufferType to the corresponding GL target constant.
+     */
+    private int resolveBufferTarget(BufferObject.BufferType bufferType) {
+        switch (bufferType) {
+            case ShaderStorageBuffer:
+                return GL4.GL_SHADER_STORAGE_BUFFER;
+            case DrawIndirectBuffer:
+                return GL4.GL_DRAW_INDIRECT_BUFFER;
+            case ParameterBuffer:
+                return GL4.GL_PARAMETER_BUFFER;
+            default:
+                throw new RendererException("Unknown BufferType: " + bufferType);
+        }
+    }
+
+    private void bindDrawIndirectBuffer(BufferObject bo) {
+        int target = GL4.GL_DRAW_INDIRECT_BUFFER;
+        if (bo.isUpdateNeeded()) {
+            updateBufferData(target, bo);
+        }
+        int bufferId = bo.getId();
+        if (context.boundDrawIndirectBuffer != bufferId) {
+            gl.glBindBuffer(target, bufferId);
+            context.boundDrawIndirectBuffer = bufferId;
+        }
+    }
+
+    private void bindParameterBuffer(BufferObject bo) {
+        int target = GL4.GL_PARAMETER_BUFFER;
+        if (bo.isUpdateNeeded()) {
+            updateBufferData(target, bo);
+        }
+        int bufferId = bo.getId();
+        if (context.boundParameterBuffer != bufferId) {
+            gl.glBindBuffer(target, bufferId);
+            context.boundParameterBuffer = bufferId;
+        }
+    }
+
+    /**
+     * Sets up vertex attributes from a mesh for indirect drawing.
+     * Does NOT call clearVertexAttribs() — callers must call it after the draw call.
+     */
+    private void setupMeshVertexAttribs(Mesh mesh) {
+        VertexBuffer interleavedData = mesh.getBuffer(VertexBuffer.Type.InterleavedData);
+        if (interleavedData != null && interleavedData.isUpdateNeeded()) {
+            updateBufferData(interleavedData);
+        }
+
+        for (VertexBuffer vb : mesh.getBufferList().getArray()) {
+            if (vb.getBufferType() == VertexBuffer.Type.InterleavedData
+                    || vb.getUsage() == VertexBuffer.Usage.CpuOnly
+                    || vb.getBufferType() == VertexBuffer.Type.Index) {
+                continue;
+            }
+
+            if (vb.getStride() == 0) {
+                setVertexAttrib(vb);
+            } else {
+                setVertexAttrib(vb, interleavedData);
+            }
+        }
+    }
+
+    /**
+     * Binds the index buffer from the mesh if present.
+     * Returns the GL format type for the index buffer, or -1 if no index buffer.
+     */
+    private int bindMeshIndexBuffer(Mesh mesh) {
+        VertexBuffer indices = mesh.getBuffer(VertexBuffer.Type.Index);
+        if (indices == null) {
+            return -1;
+        }
+
+        if (indices.isUpdateNeeded()) {
+            updateBufferData(indices);
+        }
+
+        int bufId = indices.getId();
+        if (context.boundElementArrayVBO != bufId) {
+            gl.glBindBuffer(GL.GL_ELEMENT_ARRAY_BUFFER, bufId);
+            context.boundElementArrayVBO = bufId;
+        }
+
+        return convertFormat(indices.getFormat());
+    }
+
+    @Override
+    public void renderMeshIndirect(Mesh mesh, BufferObject commandBuffer, long byteOffset) {
+        if (!caps.contains(Caps.MultiDrawIndirect)) {
+            throw new RendererException("Multi-draw indirect not supported by the video hardware");
+        }
+
+        setupMeshVertexAttribs(mesh);
+        bindDrawIndirectBuffer(commandBuffer);
+
+        // Memory barrier for GPU-written command buffers
+        gl4.glMemoryBarrier(GL4.GL_COMMAND_BARRIER_BIT);
+
+        int mode = convertElementMode(mesh.getMode());
+        int indexFormat = bindMeshIndexBuffer(mesh);
+
+        if (indexFormat != -1) {
+            gl4.glDrawElementsIndirect(mode, indexFormat, byteOffset);
+        } else {
+            gl4.glDrawArraysIndirect(mode, byteOffset);
+        }
+
+        clearVertexAttribs();
+    }
+
+    @Override
+    public void renderMeshMultiIndirect(Mesh mesh, BufferObject commandBuffer, int drawCount, long byteOffset) {
+        if (!caps.contains(Caps.MultiDrawIndirect)) {
+            throw new RendererException("Multi-draw indirect not supported by the video hardware");
+        }
+
+        setupMeshVertexAttribs(mesh);
+        bindDrawIndirectBuffer(commandBuffer);
+
+        gl4.glMemoryBarrier(GL4.GL_COMMAND_BARRIER_BIT);
+
+        int mode = convertElementMode(mesh.getMode());
+        int indexFormat = bindMeshIndexBuffer(mesh);
+
+        if (indexFormat != -1) {
+            gl4.glMultiDrawElementsIndirect(mode, indexFormat, byteOffset, drawCount, 0);
+        } else {
+            gl4.glMultiDrawArraysIndirect(mode, byteOffset, drawCount, 0);
+        }
+
+        clearVertexAttribs();
+    }
+
+    @Override
+    public void renderMeshMultiIndirectCount(Mesh mesh, BufferObject commandBuffer,
+            BufferObject countBuffer, int maxDrawCount, long byteOffset) {
+        if (!caps.contains(Caps.MultiDrawIndirectCount)) {
+            throw new RendererException("Multi-draw indirect count not supported by the video hardware");
+        }
+
+        setupMeshVertexAttribs(mesh);
+        bindDrawIndirectBuffer(commandBuffer);
+        bindParameterBuffer(countBuffer);
+
+        gl4.glMemoryBarrier(GL4.GL_COMMAND_BARRIER_BIT);
+
+        int mode = convertElementMode(mesh.getMode());
+        int indexFormat = bindMeshIndexBuffer(mesh);
+
+        if (indexFormat != -1) {
+            gl4.glMultiDrawElementsIndirectCount(mode, indexFormat, byteOffset, 0, maxDrawCount, 0);
+        } else {
+            gl4.glMultiDrawArraysIndirectCount(mode, byteOffset, 0, maxDrawCount, 0);
+        }
+
+        clearVertexAttribs();
+    }
+
     @Override
     public void deleteBuffer(VertexBuffer vb) {
         int bufId = vb.getId();
