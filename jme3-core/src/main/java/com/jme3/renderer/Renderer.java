@@ -554,6 +554,49 @@ public interface Renderer {
     public void setShaderStorageBufferObject(int bindingPoint, BufferObject bufferObject) ;
     public void setUniformBufferObject(int bindingPoint, BufferObject bufferObject) ;
 
+    /**
+     * Render using a single indirect draw command from the command buffer.
+     * Whether indexed or non-indexed drawing is used is determined by whether
+     * the mesh has an index buffer.
+     *
+     * @param mesh          the mesh defining vertex format and buffers
+     * @param commandBuffer the indirect command buffer (BufferType.DrawIndirectBuffer)
+     * @param byteOffset    byte offset into the command buffer (not a command index)
+     */
+    default void renderMeshIndirect(Mesh mesh, BufferObject commandBuffer, long byteOffset) {
+        throw new UnsupportedOperationException("Indirect rendering not supported by this renderer");
+    }
+
+    /**
+     * Render using multiple indirect draw commands from the command buffer.
+     * Whether indexed or non-indexed drawing is used is determined by whether
+     * the mesh has an index buffer.
+     *
+     * @param mesh          the mesh defining vertex format and buffers
+     * @param commandBuffer the indirect command buffer (BufferType.DrawIndirectBuffer)
+     * @param drawCount     number of draw commands to execute
+     * @param byteOffset    byte offset into the command buffer (not a command index)
+     */
+    default void renderMeshMultiIndirect(Mesh mesh, BufferObject commandBuffer, int drawCount, long byteOffset) {
+        throw new UnsupportedOperationException("Indirect rendering not supported by this renderer");
+    }
+
+    /**
+     * Render using multiple indirect draw commands with GPU-determined count.
+     * The actual draw count is read from countBuffer at offset 0. Whether indexed
+     * or non-indexed drawing is used is determined by whether the mesh has an index buffer.
+     *
+     * @param mesh          the mesh defining vertex format and buffers
+     * @param commandBuffer the indirect command buffer (BufferType.DrawIndirectBuffer)
+     * @param countBuffer   buffer containing the draw count (BufferType.ParameterBuffer)
+     * @param maxDrawCount  upper bound on the draw count
+     * @param byteOffset    byte offset into the command buffer (not a command index)
+     */
+    default void renderMeshMultiIndirectCount(Mesh mesh, BufferObject commandBuffer,
+            BufferObject countBuffer, int maxDrawCount, long byteOffset) {
+        throw new UnsupportedOperationException("Indirect rendering with count not supported by this renderer");
+    }
+
     public void deleteFence(GLFence fence);
 
     /**
