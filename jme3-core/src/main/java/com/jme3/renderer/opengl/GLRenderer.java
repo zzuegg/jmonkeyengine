@@ -290,6 +290,17 @@ public final class GLRenderer implements Renderer {
             if (oglVer >= 450) {
                 caps.add(Caps.OpenGL45);
             }
+            if (oglVer >= 460) {
+                caps.add(Caps.OpenGL46);
+            }
+            // Multi-draw indirect: core in 4.3
+            if (oglVer >= 430) {
+                caps.add(Caps.MultiDrawIndirect);
+            }
+            // Multi-draw indirect count: core in 4.6
+            if (oglVer >= 460) {
+                caps.add(Caps.MultiDrawIndirectCount);
+            }
         }
 
         int glslVer = extractVersion(gl.glGetString(GL.GL_SHADING_LANGUAGE_VERSION));
@@ -301,6 +312,8 @@ public final class GLRenderer implements Renderer {
                 }
                 // so that future OpenGL revisions won't break jme3
                 // fall through intentional
+            case 460:
+                caps.add(Caps.GLSL460);
             case 450:
                 caps.add(Caps.GLSL450);
             case 440:
