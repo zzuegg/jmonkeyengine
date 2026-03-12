@@ -53,6 +53,24 @@ import com.jme3.util.NativeObject;
  */
 public class BufferObject extends NativeObject implements Savable {
     /**
+     * Hint to the renderer which GL buffer target to bind this buffer to.
+     */
+    public static enum BufferType {
+        /**
+         * Bind to GL_SHADER_STORAGE_BUFFER. This is the default for backwards compatibility.
+         */
+        ShaderStorageBuffer,
+        /**
+         * Bind to GL_DRAW_INDIRECT_BUFFER. Used for indirect draw command buffers.
+         */
+        DrawIndirectBuffer,
+        /**
+         * Bind to GL_PARAMETER_BUFFER. Used for indirect draw count buffers.
+         */
+        ParameterBuffer
+    }
+
+    /**
      * Hint to suggest the renderer how to access this buffer
      */
     public static enum AccessHint {
@@ -99,6 +117,7 @@ public class BufferObject extends NativeObject implements Savable {
 
     private AccessHint accessHint = AccessHint.Dynamic;
     private NatureHint natureHint = NatureHint.Draw;
+    private BufferType bufferType = BufferType.ShaderStorageBuffer;
 
     private transient WeakReference<BufferObject> weakRef;
     private transient int binding = -1;
@@ -318,12 +337,26 @@ public class BufferObject extends NativeObject implements Savable {
     }
 
     /**
-     * Set NatureHint to hint the renderer on how to use this data. 
-     * 
+     * Set NatureHint to hint the renderer on how to use this data.
+     *
      * @param natureHint
      */
     public void setNatureHint(NatureHint natureHint) {
         this.natureHint = natureHint;
+        setUpdateNeeded();
+    }
+
+    public BufferType getBufferType() {
+        return bufferType;
+    }
+
+    /**
+     * Set the buffer type to hint the renderer which GL target to bind to.
+     *
+     * @param bufferType the buffer type
+     */
+    public void setBufferType(BufferType bufferType) {
+        this.bufferType = bufferType;
         setUpdateNeeded();
     }
 
@@ -332,6 +365,7 @@ public class BufferObject extends NativeObject implements Savable {
         OutputCapsule oc = ex.getCapsule(this);
         oc.write(accessHint.ordinal(), "accessHint", 0);
         oc.write(natureHint.ordinal(), "natureHint", 0);
+        oc.write(bufferType.ordinal(), "bufferType", 0);
         oc.writeSavableArrayList(regions, "regions", null);
         oc.write(data, "data", null);
     }
@@ -341,6 +375,7 @@ public class BufferObject extends NativeObject implements Savable {
         InputCapsule ic = im.getCapsule(this);
         accessHint = AccessHint.values()[ic.readInt("accessHint", 0)];
         natureHint = NatureHint.values()[ic.readInt("natureHint", 0)];
+        bufferType = BufferType.values()[ic.readInt("bufferType", 0)];
         regions.addAll(ic.readSavableArrayList("regions", null));
         data = ic.readByteBuffer("data", null);
         setUpdateNeeded(true);
