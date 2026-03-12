@@ -185,8 +185,7 @@ public class VertexBuffer extends NativeObject implements Savable, Cloneable {
         /**
          * Information about this instance.
          *
-         * Format should be {@link Format#Float} and number of components
-         * should be 16.
+         * Typically uses {@link Format#Float} with 16 components (a 4x4 matrix).
          */
         InstanceData,
         /**
@@ -373,13 +372,9 @@ public class VertexBuffer extends NativeObject implements Savable, Cloneable {
         if (offset > data.limit() || offset < 0) {
             throw new AssertionError();
         }
-        // Are components between 1 and 4?
-
-        // Are components between 1 and 4 and not InstanceData?
-        if (bufType != Type.InstanceData) {
-            if (components < 1 || components > 4) {
-                throw new AssertionError();
-            }
+        // Components must be between 1 and 4, or a multiple of 4 (for multi-slot buffers like matrices).
+        if (components < 1 || (components > 4 && components % 4 != 0)) {
+            throw new AssertionError();
         }
 
         // Does usage comply with buffer directness?
@@ -659,10 +654,8 @@ public class VertexBuffer extends NativeObject implements Savable, Cloneable {
             throw new IllegalArgumentException("VertexBuffer data cannot be read-only.");
         }
 
-        if (bufType != Type.InstanceData) {
-            if (components < 1 || components > 4) {
-                throw new IllegalArgumentException("components must be between 1 and 4");
-            }
+        if (components < 1 || (components > 4 && components % 4 != 0)) {
+            throw new IllegalArgumentException("components must be between 1 and 4, or a multiple of 4");
         }
 
         this.data = data;
@@ -994,13 +987,13 @@ public class VertexBuffer extends NativeObject implements Savable, Cloneable {
      * of elements with the given number of components in each element.
      * 
      * @param format the desired format of components, such as Float or Half
-     * @param components the number of components per element (&ge;1, &le;4)
+     * @param components the number of components per element (1-4, or a multiple of 4 for multi-slot buffers)
      * @param numElements the desired capacity (number of elements)
      * @return a new Buffer
      */
     public static Buffer createBuffer(Format format, int components, int numElements) {
-        if (components < 1 || components > 4) {
-            throw new IllegalArgumentException("Num components must be between 1 and 4");
+        if (components < 1 || (components > 4 && components % 4 != 0)) {
+            throw new IllegalArgumentException("Num components must be between 1 and 4, or a multiple of 4");
         }
 
         int total = numElements * components;
