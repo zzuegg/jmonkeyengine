@@ -93,6 +93,25 @@ public interface GL4 extends GL3 {
     public static final int GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT = 0x90DF;
 
     /**
+     * Accepted by the {@code target} parameters of BindBuffer, BufferData,
+     * BufferSubData, MapBuffer, UnmapBuffer, GetBufferSubData, and GetBufferPointerv.
+     */
+    public static final int GL_DRAW_INDIRECT_BUFFER = 0x8F3F;
+
+    /**
+     * Accepted by the {@code target} parameters of BindBuffer, BufferData,
+     * BufferSubData, MapBuffer, UnmapBuffer, GetBufferSubData, and GetBufferPointerv.
+     * Used by glMultiDraw*IndirectCount to read the draw count from a buffer.
+     */
+    public static final int GL_PARAMETER_BUFFER = 0x80EE;
+
+    /**
+     * Accepted by the {@code barriers} parameter of MemoryBarrier.
+     * Ensures indirect draw command buffer writes are visible before the draw call.
+     */
+    public static final int GL_COMMAND_BARRIER_BIT = 0x00000040;
+
+    /**
      * <p><a target="_blank" href="http://docs.gl/gl4/glPatchParameteri">Reference Page</a></p>
      * <p>
      * Specifies the integer value of the specified parameter for patch primitives.
@@ -194,5 +213,97 @@ public interface GL4 extends GL3 {
      * @param sync the sync object to delete
      */
     public void glDeleteSync(GLFence sync);
+
+    /**
+     * <p><a target="_blank" href="http://docs.gl/gl4/glDrawElementsIndirect">Reference Page</a></p>
+     * <p>
+     * Renders indexed primitives from array data, taking parameters from memory.
+     *
+     * @param mode     the primitive type being rendered. One of the GL_* primitive mode constants.
+     * @param type     the type of data in the index buffer. One of {@link GL#GL_UNSIGNED_BYTE},
+     *                 {@link GL#GL_UNSIGNED_SHORT}, {@link GL#GL_UNSIGNED_INT}.
+     * @param indirect the offset into the buffer bound to {@link #GL_DRAW_INDIRECT_BUFFER},
+     *                 or a client-side address (if no buffer is bound) of the draw parameters structure.
+     */
+    public void glDrawElementsIndirect(int mode, int type, long indirect);
+
+    /**
+     * <p><a target="_blank" href="http://docs.gl/gl4/glDrawArraysIndirect">Reference Page</a></p>
+     * <p>
+     * Renders primitives from array data, taking parameters from memory.
+     *
+     * @param mode     the primitive type being rendered. One of the GL_* primitive mode constants.
+     * @param indirect the offset into the buffer bound to {@link #GL_DRAW_INDIRECT_BUFFER},
+     *                 or a client-side address (if no buffer is bound) of the draw parameters structure.
+     */
+    public void glDrawArraysIndirect(int mode, long indirect);
+
+    /**
+     * <p><a target="_blank" href="http://docs.gl/gl4/glMultiDrawElementsIndirect">Reference Page</a></p>
+     * <p>
+     * Renders multiple sets of indexed primitives from array data, taking parameters from memory.
+     *
+     * @param mode      the primitive type being rendered. One of the GL_* primitive mode constants.
+     * @param type      the type of data in the index buffer. One of {@link GL#GL_UNSIGNED_BYTE},
+     *                  {@link GL#GL_UNSIGNED_SHORT}, {@link GL#GL_UNSIGNED_INT}.
+     * @param indirect  the offset into the buffer bound to {@link #GL_DRAW_INDIRECT_BUFFER} of the
+     *                  first draw parameters structure, or a client-side address (if no buffer is bound).
+     * @param drawCount the number of draw parameter structures to process.
+     * @param stride    the distance, in bytes, between the start of each draw parameters structure.
+     *                  If zero, structures are assumed to be tightly packed.
+     */
+    public void glMultiDrawElementsIndirect(int mode, int type, long indirect, int drawCount, int stride);
+
+    /**
+     * <p><a target="_blank" href="http://docs.gl/gl4/glMultiDrawArraysIndirect">Reference Page</a></p>
+     * <p>
+     * Renders multiple sets of primitives from array data, taking parameters from memory.
+     *
+     * @param mode      the primitive type being rendered. One of the GL_* primitive mode constants.
+     * @param indirect  the offset into the buffer bound to {@link #GL_DRAW_INDIRECT_BUFFER} of the
+     *                  first draw parameters structure, or a client-side address (if no buffer is bound).
+     * @param drawCount the number of draw parameter structures to process.
+     * @param stride    the distance, in bytes, between the start of each draw parameters structure.
+     *                  If zero, structures are assumed to be tightly packed.
+     */
+    public void glMultiDrawArraysIndirect(int mode, long indirect, int drawCount, int stride);
+
+    /**
+     * <p><a target="_blank" href="http://docs.gl/gl4/glMultiDrawElementsIndirectCount">Reference Page</a></p>
+     * <p>
+     * Renders multiple sets of indexed primitives from array data, taking parameters and the draw count from memory.
+     * Requires OpenGL 4.6 or the {@code ARB_indirect_parameters} extension.
+     *
+     * @param mode        the primitive type being rendered. One of the GL_* primitive mode constants.
+     * @param type        the type of data in the index buffer. One of {@link GL#GL_UNSIGNED_BYTE},
+     *                    {@link GL#GL_UNSIGNED_SHORT}, {@link GL#GL_UNSIGNED_INT}.
+     * @param indirect    the offset into the buffer bound to {@link #GL_DRAW_INDIRECT_BUFFER} of the
+     *                    first draw parameters structure.
+     * @param drawCount   the offset into the buffer bound to {@link #GL_PARAMETER_BUFFER} containing
+     *                    the draw count as a 32-bit unsigned integer.
+     * @param maxDrawCount an upper bound on the number of draws that may be processed. Must be less
+     *                     than or equal to the size of the indirect buffer divided by the stride.
+     * @param stride      the distance, in bytes, between the start of each draw parameters structure.
+     *                    If zero, structures are assumed to be tightly packed.
+     */
+    public void glMultiDrawElementsIndirectCount(int mode, int type, long indirect, long drawCount, int maxDrawCount, int stride);
+
+    /**
+     * <p><a target="_blank" href="http://docs.gl/gl4/glMultiDrawArraysIndirectCount">Reference Page</a></p>
+     * <p>
+     * Renders multiple sets of primitives from array data, taking parameters and the draw count from memory.
+     * Requires OpenGL 4.6 or the {@code ARB_indirect_parameters} extension.
+     *
+     * @param mode        the primitive type being rendered. One of the GL_* primitive mode constants.
+     * @param indirect    the offset into the buffer bound to {@link #GL_DRAW_INDIRECT_BUFFER} of the
+     *                    first draw parameters structure.
+     * @param drawCount   the offset into the buffer bound to {@link #GL_PARAMETER_BUFFER} containing
+     *                    the draw count as a 32-bit unsigned integer.
+     * @param maxDrawCount an upper bound on the number of draws that may be processed. Must be less
+     *                     than or equal to the size of the indirect buffer divided by the stride.
+     * @param stride      the distance, in bytes, between the start of each draw parameters structure.
+     *                    If zero, structures are assumed to be tightly packed.
+     */
+    public void glMultiDrawArraysIndirectCount(int mode, long indirect, long drawCount, int maxDrawCount, int stride);
 
 }
