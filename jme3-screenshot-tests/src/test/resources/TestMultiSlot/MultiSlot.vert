@@ -11,7 +11,13 @@ out vec4 vertColor;
 void main() {
     gl_Position = g_WorldViewProjectionMatrix * vec4(inPosition, 1.0);
 
-    // Use the multi-slot attribute data to drive vertex color.
-    // Each row of the matrix is a vec4; use row 0 as RGBA color.
-    vertColor = inTexCoord3[0];
+    // Read all 4 rows of the matrix to verify every attribute slot carries data.
+    // Row 0: R contribution, Row 1: G contribution, Row 2: B contribution, Row 3: A contribution.
+    // Each row's .x component holds the value for that channel.
+    vertColor = vec4(
+        inTexCoord3[0].x,
+        inTexCoord3[1].x,
+        inTexCoord3[2].x,
+        inTexCoord3[3].x
+    );
 }

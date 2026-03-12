@@ -47,13 +47,15 @@ import java.nio.FloatBuffer;
 
 /**
  * Verifies that a non-InstanceData VertexBuffer with >4 components (multi-slot)
- * renders correctly through the real GL pipeline. A custom shader reads a
- * 16-component TexCoord3 attribute (bound as a mat4) and uses its first row
- * as vertex color, proving the data arrives at the GPU intact.
+ * renders correctly through the real GL pipeline. A custom shader reads from
+ * all 4 rows of a 16-component TexCoord3 attribute (bound as a mat4), using
+ * each row's .x to build the final RGBA color. This proves that all 4 attribute
+ * slots carry data correctly through the pipeline.
  *
  * <p>The quad should render with each vertex showing a different color:
  * red (bottom-left), green (bottom-right), blue (top-left), yellow (top-right).
- * If the multi-slot binding is broken, the quad will be black or the test will crash.</p>
+ * If any slot fails to deliver data, the corresponding color channel will be
+ * wrong (e.g. missing alpha makes vertices transparent against the black background).</p>
  */
 public class TestMultiSlotVertexBuffer extends ScreenshotTestBase {
 
@@ -80,32 +82,33 @@ public class TestMultiSlotVertexBuffer extends ScreenshotTestBase {
                         new short[]{0, 1, 2, 1, 3, 2});
 
                 // 16-component TexCoord3 buffer (mat4 per vertex).
-                // Row 0 of each matrix encodes the desired RGBA color.
-                // Rows 1-3 are padding (zeroes).
+                // The shader reads row[i].x from each of the 4 rows to build
+                // the final RGBA color, ensuring all 4 attribute slots are used:
+                //   R = row0.x, G = row1.x, B = row2.x, A = row3.x
                 FloatBuffer texCoord3 = BufferUtils.createFloatBuffer(
-                    // Vertex 0 (bottom-left): RED
-                    1, 0, 0, 1,   // row 0: color
-                    0, 0, 0, 0,   // row 1
-                    0, 0, 0, 0,   // row 2
-                    0, 0, 0, 0,   // row 3
+                    // Vertex 0 (bottom-left): RED (R=1, G=0, B=0, A=1)
+                    1, 0, 0, 0,   // row 0 (slot 0): R=1
+                    0, 0, 0, 0,   // row 1 (slot 1): G=0
+                    0, 0, 0, 0,   // row 2 (slot 2): B=0
+                    1, 0, 0, 0,   // row 3 (slot 3): A=1
 
-                    // Vertex 1 (bottom-right): GREEN
-                    0, 1, 0, 1,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
+                    // Vertex 1 (bottom-right): GREEN (R=0, G=1, B=0, A=1)
+                    0, 0, 0, 0,   // row 0: R=0
+                    1, 0, 0, 0,   // row 1: G=1
+                    0, 0, 0, 0,   // row 2: B=0
+                    1, 0, 0, 0,   // row 3: A=1
 
-                    // Vertex 2 (top-left): BLUE
-                    0, 0, 1, 1,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
+                    // Vertex 2 (top-left): BLUE (R=0, G=0, B=1, A=1)
+                    0, 0, 0, 0,   // row 0: R=0
+                    0, 0, 0, 0,   // row 1: G=0
+                    1, 0, 0, 0,   // row 2: B=1
+                    1, 0, 0, 0,   // row 3: A=1
 
-                    // Vertex 3 (top-right): YELLOW
-                    1, 1, 0, 1,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0
+                    // Vertex 3 (top-right): YELLOW (R=1, G=1, B=0, A=1)
+                    1, 0, 0, 0,   // row 0: R=1
+                    1, 0, 0, 0,   // row 1: G=1
+                    0, 0, 0, 0,   // row 2: B=0
+                    1, 0, 0, 0    // row 3: A=1
                 );
                 mesh.setBuffer(VertexBuffer.Type.TexCoord3, 16, texCoord3);
 
