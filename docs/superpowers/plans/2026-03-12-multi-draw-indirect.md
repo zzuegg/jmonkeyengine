@@ -173,13 +173,11 @@ Before the closing `}` of `LwjglGL` (line 702), add:
     }
 ```
 
-Note: You will need to add LWJGL3 imports at the top of the file:
+Note: You must add two LWJGL3 imports at the top of the file (neither is currently present):
 ```java
 import org.lwjgl.opengl.GL43;
 import org.lwjgl.opengl.GL46;
 ```
-
-Check existing imports first — `GL43` may already be imported (used for `glGetProgramResourceIndex` and `glShaderStorageBlockBinding`). Only add what's missing.
 
 - [ ] **Step 2: Verify compilation**
 
@@ -572,7 +570,7 @@ After the helper from step 1, add:
         }
         int bufferId = bo.getId();
         if (context.boundDrawIndirectBuffer != bufferId) {
-            gl3.glBindBuffer(target, bufferId);
+            gl.glBindBuffer(target, bufferId);
             context.boundDrawIndirectBuffer = bufferId;
         }
     }
@@ -584,7 +582,7 @@ After the helper from step 1, add:
         }
         int bufferId = bo.getId();
         if (context.boundParameterBuffer != bufferId) {
-            gl3.glBindBuffer(target, bufferId);
+            gl.glBindBuffer(target, bufferId);
             context.boundParameterBuffer = bufferId;
         }
     }
@@ -598,7 +596,8 @@ After the bind helpers, add:
     /**
      * Sets up vertex attributes from a mesh for indirect drawing.
      * Reuses the same attribute setup logic as renderMeshDefault but
-     * without the actual draw call.
+     * without the actual draw call. Does NOT call clearVertexAttribs() —
+     * callers must call it after the draw call completes.
      */
     private void setupMeshVertexAttribs(Mesh mesh) {
         VertexBuffer interleavedData = mesh.getBuffer(VertexBuffer.Type.InterleavedData);
@@ -619,8 +618,6 @@ After the bind helpers, add:
                 setVertexAttrib(vb, interleavedData);
             }
         }
-
-        clearVertexAttribs();
     }
 
     /**
@@ -672,6 +669,8 @@ After the helpers, add:
         } else {
             gl4.glDrawArraysIndirect(mode, byteOffset);
         }
+
+        clearVertexAttribs();
     }
 
     @Override
@@ -693,6 +692,8 @@ After the helpers, add:
         } else {
             gl4.glMultiDrawArraysIndirect(mode, byteOffset, drawCount, 0);
         }
+
+        clearVertexAttribs();
     }
 
     @Override
@@ -716,6 +717,8 @@ After the helpers, add:
         } else {
             gl4.glMultiDrawArraysIndirectCount(mode, byteOffset, 0, maxDrawCount, 0);
         }
+
+        clearVertexAttribs();
     }
 ```
 
