@@ -262,6 +262,13 @@ public class RenderContext {
     public final WeakReference<Image> boundTextures[]
             = new WeakReference[maxTextureUnits];
 
+    /**
+     * Bindless texture handles for each texture unit.
+     * Non-zero values indicate a valid bindless handle is available for that unit.
+     * Used when {@link Caps#BindlessTexture} is supported to pass handles
+     * directly to shaders via {@code glUniformHandleui64ARB}.
+     */
+    public final long[] bindlessHandles = new long[maxTextureUnits];
 
     /**
      * Current bound buffer object IDs for each buffer object unit.
@@ -423,6 +430,7 @@ public class RenderContext {
 
         for (int i = 0; i < boundTextures.length; i++) {
             boundTextures[i] = null;
+            bindlessHandles[i] = 0;
         }
 
         textureIndexList.reset();

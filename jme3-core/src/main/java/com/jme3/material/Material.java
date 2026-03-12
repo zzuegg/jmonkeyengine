@@ -907,6 +907,7 @@ public class Material implements CloneableSmartAsset, Cloneable, Savable {
                     throw new IllegalStateException(message);
                 }
                 uniform.setValue(VarType.Int, unit.textureUnit);
+                uniform.setTextureSampler(true);
                 unit.textureUnit++;
             } else {
                 uniform.setValue(type, param.getValue());

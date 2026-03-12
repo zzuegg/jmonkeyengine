@@ -37,6 +37,7 @@ import com.jme3.system.AppSettings;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * This is how a test is configured and started. It uses a fluent API.
@@ -58,6 +59,8 @@ public class ScreenshotTest{
     TestResolution resolution = new TestResolution(500, 400);
 
     String baseImageFileName = null;
+
+    Consumer<AppSettings> settingsCustomizer = null;
 
     public ScreenshotTest(AppState... initialStates){
         scenarios.add(new Scenario("SimpleSingleScenario", initialStates));
@@ -85,6 +88,15 @@ public class ScreenshotTest{
         return this;
     }
 
+    /**
+     * Sets a customizer that will be called with the {@link AppSettings}
+     * before the test application is started.
+     */
+    public ScreenshotTest setSettingsCustomizer(Consumer<AppSettings> customizer){
+        this.settingsCustomizer = customizer;
+        return this;
+    }
+
     public ScreenshotTest setTestResolution(TestResolution resolution){
         this.resolution = resolution;
         return this;
@@ -105,6 +117,9 @@ public class ScreenshotTest{
         settings.setResolution(resolution.getWidth(), resolution.getHeight());
         settings.setAudioRenderer(null); // Disable audio (for headless)
         settings.setUseInput(false); //while it will run with inputs on it causes non-fatal errors.
+        if (settingsCustomizer != null) {
+            settingsCustomizer.accept(settings);
+        }
 
         String imageFilePrefix = baseImageFileName == null ? calculateImageFilePrefix() : baseImageFileName;
 

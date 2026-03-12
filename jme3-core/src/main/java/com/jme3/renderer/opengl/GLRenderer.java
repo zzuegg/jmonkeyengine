@@ -118,6 +118,7 @@ public final class GLRenderer implements Renderer {
     private final TextureUtil texUtil;
     private boolean debug = false;
     private int debugGroupId = 0;
+    private boolean bindlessTextureEnabled = false;
 
 
     public GLRenderer(GL gl, GLExt glext, GLFbo glfbo) {
@@ -141,6 +142,37 @@ public final class GLRenderer implements Renderer {
 
     public void setDebugEnabled(boolean v) {
         debug = v;
+    }
+
+    /**
+     * Enables or disables the use of bindless textures.
+     * Bindless textures are an optional optimization that passes texture handles
+     * directly to shaders instead of binding textures to texture units.
+     * Requires {@link Caps#BindlessTexture} to be supported.
+     * Disabled by default.
+     *
+     * @param enabled true to enable bindless textures, false to use traditional binding.
+     */
+    @Override
+    public void setBindlessTextureEnabled(boolean enabled) {
+        if (enabled && !caps.contains(Caps.BindlessTexture)) {
+            logger.log(Level.WARNING, "Bindless textures requested but not supported by hardware, ignoring.");
+            return;
+        }
+        this.bindlessTextureEnabled = enabled;
+        if (enabled) {
+            logger.log(Level.INFO, "Bindless textures enabled");
+        }
+    }
+
+    /**
+     * Returns whether bindless textures are currently enabled.
+     *
+     * @return true if bindless textures are enabled.
+     */
+    @Override
+    public boolean isBindlessTextureEnabled() {
+        return bindlessTextureEnabled;
     }
 
     @Override
@@ -498,6 +530,11 @@ public final class GLRenderer implements Renderer {
         if (hasExtension("GL_EXT_texture_filter_anisotropic")) {
             caps.add(Caps.TextureFilterAnisotropic);
             limits.put(Limits.TextureAnisotropy, getInteger(GLExt.GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT));
+        }
+
+        if (hasExtension("GL_ARB_bindless_texture")) {
+            caps.add(Caps.BindlessTexture);
+            logger.log(Level.FINE, "Bindless texture support detected (GL_ARB_bindless_texture)");
         }
 
         if (hasExtension("GL_EXT_framebuffer_object")
@@ -1435,6 +1472,14 @@ public final class GLRenderer implements Renderer {
                 break;
             case Int:
                 Integer i = (Integer) uniform.getValue();
+                if (bindlessTextureEnabled && uniform.isTextureSampler()) {
+                    int unit = i.intValue();
+                    long handle = context.bindlessHandles[unit];
+                    if (handle != 0) {
+                        glext.glUniformHandleui64ARB(loc, handle);
+                        break;
+                    }
+                }
                 gl.glUniform1i(loc, i.intValue());
                 break;
             default:
@@ -1516,7 +1561,12 @@ public final class GLRenderer implements Renderer {
         ListMap<String, Uniform> uniforms = shader.getUniformMap();
         for (int i = 0; i < uniforms.size(); i++) {
             Uniform uniform = uniforms.getValue(i);
-            if (uniform.isUpdateNeeded()) {
+            if (uniform.isUpdateNeeded()
+                    || (bindlessTextureEnabled && uniform.isTextureSampler())) {
+                // Bindless texture sampler uniforms must always be re-uploaded
+                // because the underlying handle may change (e.g. when sampling
+                // parameters are modified at runtime) even though the texture
+                // unit number stays the same.
                 updateUniform(shader, uniform);
             }
         }
@@ -1617,6 +1667,16 @@ public final class GLRenderer implements Renderer {
 
         }
         
+        // Inject bindless extension and layout qualifier when bindless is
+        // enabled, unless the shader source already declares it.
+        boolean injectBindless = bindlessTextureEnabled
+                && caps.contains(Caps.BindlessTexture)
+                && !source.getSource().contains("GL_ARB_bindless_texture");
+        if (injectBindless) {
+            stringBuf.append("#extension GL_ARB_bindless_texture : require\n");
+            stringBuf.append("layout(bindless_sampler) uniform;\n");
+        }
+
         if (linearizeSrgbImages) {
             stringBuf.append("#define SRGB 1\n");
         }
@@ -2751,10 +2811,162 @@ public final class GLRenderer implements Renderer {
         int texId = image.getId();
         assert texId != -1;
 
-        setupTextureParams(unit, tex);
+        if (bindlessTextureEnabled) {
+            // For bindless textures, use sampler objects instead of
+            // glTexParameteri (which is GL_INVALID_OPERATION on a texture
+            // referenced by a handle per the ARB_bindless_texture spec).
+            updateBindlessHandle(unit, tex, image);
+        } else {
+            setupTextureParams(unit, tex);
+            context.bindlessHandles[unit] = 0;
+        }
+
         if (debug && caps.contains(Caps.GLDebug)) {
             if (tex.getName() != null) glext.glObjectLabel(GL.GL_TEXTURE, tex.getImage().getId(), tex.getName());
         }
+    }
+
+    /**
+     * Returns {@code true} if the desired sampling parameters on the
+     * {@link Texture} differ from what is currently cached on the
+     * {@link Image}'s {@link LastTextureState}.  Used to decide whether a
+     * bindless handle needs to be invalidated and re-obtained.
+     */
+    private boolean needsSamplerStateUpdate(Texture tex, Image image) {
+        LastTextureState s = image.getLastTextureState();
+        if (s.magFilter != tex.getMagFilter()) return true;
+        if (s.minFilter != tex.getMinFilter()) return true;
+        if (s.sWrap != tex.getWrap(Texture.WrapAxis.S)) return true;
+        if (s.tWrap != tex.getWrap(Texture.WrapAxis.T)) return true;
+
+        int desiredAniso = tex.getAnisotropicFilter() == 0
+                ? defaultAnisotropicFilter : tex.getAnisotropicFilter();
+        if (caps.contains(Caps.TextureFilterAnisotropic)
+                && s.anisoFilter != desiredAniso) return true;
+
+        if (s.shadowCompareMode != tex.getShadowCompareMode()) return true;
+        return false;
+    }
+
+    /**
+     * Creates or updates the bindless handle for the given texture, using a
+     * GL sampler object to encapsulate the desired sampling parameters.
+     * When sampling parameters change at runtime, a new sampler object and
+     * handle are created (the old ones are cleaned up).
+     */
+    private void updateBindlessHandle(int unit, Texture tex, Image image) {
+        if (image.getBindlessHandle() == 0) {
+            // First time: set up texture params on the GL texture (safe, no
+            // handle exists yet), then obtain the initial handle.
+            setupTextureParams(unit, tex);
+            long handle = glext.glGetTextureHandleARB(image.getId());
+            image.setBindlessHandle(handle);
+            glext.glMakeTextureHandleResidentARB(handle);
+            image.setBindlessResident(true);
+            context.bindlessHandles[unit] = handle;
+            updateLastTextureStateForBindless(tex, image);
+            return;
+        }
+
+        if (!needsSamplerStateUpdate(tex, image)) {
+            // No sampler change — reuse existing handle.
+            context.bindlessHandles[unit] = image.getBindlessHandle();
+            return;
+        }
+
+        // Sampler state changed at runtime.  Create a new sampler object
+        // with the updated params and obtain a new texture+sampler handle
+        // via glGetTextureSamplerHandleARB.  The old handle is made
+        // non-resident first (a handle must be non-resident before a new
+        // one for the same texture can be made resident).
+        if (image.isBindlessResident()) {
+            glext.glMakeTextureHandleNonResidentARB(image.getBindlessHandle());
+            image.setBindlessResident(false);
+        }
+
+        // Create new sampler object before deleting the old one to ensure
+        // a different GL name, which guarantees a different handle.
+        int newSamplerId = createBindlessSampler(tex);
+        int oldSamplerId = image.getBindlessSamplerId();
+        if (oldSamplerId != 0) {
+            glext.glDeleteSamplers(oldSamplerId);
+        }
+        image.setBindlessSamplerId(newSamplerId);
+
+        long handle = glext.glGetTextureSamplerHandleARB(image.getId(), newSamplerId);
+        image.setBindlessHandle(handle);
+        glext.glMakeTextureHandleResidentARB(handle);
+        image.setBindlessResident(true);
+        context.bindlessHandles[unit] = handle;
+        updateLastTextureStateForBindless(tex, image);
+    }
+
+    /**
+     * Creates a GL sampler object configured with the sampling parameters
+     * from the given {@link Texture}.
+     */
+    private int createBindlessSampler(Texture tex) {
+        int sampler = glext.glGenSamplers();
+
+        boolean haveMips = true;
+        Image image = tex.getImage();
+        if (image != null) {
+            haveMips = image.isGeneratedMipmapsRequired() || image.hasMipmaps();
+        }
+
+        glext.glSamplerParameteri(sampler, GL.GL_TEXTURE_MAG_FILTER,
+                convertMagFilter(tex.getMagFilter()));
+        glext.glSamplerParameteri(sampler, GL.GL_TEXTURE_MIN_FILTER,
+                convertMinFilter(tex.getMinFilter(), haveMips));
+        int wrapS = convertWrapMode(tex.getWrap(Texture.WrapAxis.S));
+        int wrapT = convertWrapMode(tex.getWrap(Texture.WrapAxis.T));
+        glext.glSamplerParameteri(sampler, GL.GL_TEXTURE_WRAP_S, wrapS);
+        glext.glSamplerParameteri(sampler, GL.GL_TEXTURE_WRAP_T, wrapT);
+
+        if (tex.getType() == Texture.Type.ThreeDimensional
+                || tex.getType() == Texture.Type.CubeMap) {
+            glext.glSamplerParameteri(sampler, GL2.GL_TEXTURE_WRAP_R,
+                    convertWrapMode(tex.getWrap(Texture.WrapAxis.R)));
+        }
+
+        int desiredAniso = tex.getAnisotropicFilter() == 0
+                ? defaultAnisotropicFilter : tex.getAnisotropicFilter();
+        if (caps.contains(Caps.TextureFilterAnisotropic) && desiredAniso > 0) {
+            glext.glSamplerParameterf(sampler,
+                    GLExt.GL_TEXTURE_MAX_ANISOTROPY_EXT, desiredAniso);
+        }
+
+        Texture.ShadowCompareMode compareMode = tex.getShadowCompareMode();
+        if (compareMode != Texture.ShadowCompareMode.Off) {
+            glext.glSamplerParameteri(sampler,
+                    GL2.GL_TEXTURE_COMPARE_MODE, GL2.GL_COMPARE_REF_TO_TEXTURE);
+            if (compareMode == Texture.ShadowCompareMode.GreaterOrEqual) {
+                glext.glSamplerParameteri(sampler,
+                        GL2.GL_TEXTURE_COMPARE_FUNC, GL.GL_GEQUAL);
+            } else {
+                glext.glSamplerParameteri(sampler,
+                        GL2.GL_TEXTURE_COMPARE_FUNC, GL.GL_LEQUAL);
+            }
+        }
+
+        return sampler;
+    }
+
+    /**
+     * Updates the {@link LastTextureState} cache to match the current
+     * sampling parameters of the texture, for use with bindless handle tracking.
+     */
+    private void updateLastTextureStateForBindless(Texture tex, Image image) {
+        LastTextureState s = image.getLastTextureState();
+        s.magFilter = tex.getMagFilter();
+        s.minFilter = tex.getMinFilter();
+        s.sWrap = tex.getWrap(Texture.WrapAxis.S);
+        s.tWrap = tex.getWrap(Texture.WrapAxis.T);
+
+        int desiredAniso = tex.getAnisotropicFilter() == 0
+                ? defaultAnisotropicFilter : tex.getAnisotropicFilter();
+        s.anisoFilter = desiredAniso;
+        s.shadowCompareMode = tex.getShadowCompareMode();
     }
     
     @Override
@@ -2860,6 +3072,16 @@ public final class GLRenderer implements Renderer {
     public void deleteImage(Image image) {
         int texId = image.getId();
         if (texId != -1) {
+            // Make bindless handle non-resident before deleting
+            if (image.isBindlessResident()) {
+                glext.glMakeTextureHandleNonResidentARB(image.getBindlessHandle());
+            }
+
+            // Delete associated sampler object
+            if (image.getBindlessSamplerId() != 0) {
+                glext.glDeleteSamplers(image.getBindlessSamplerId());
+            }
+
             intBuf1.put(0, texId);
             intBuf1.position(0).limit(1);
             gl.glDeleteTextures(intBuf1);

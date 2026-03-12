@@ -1,0 +1,22 @@
+MaterialDef BindlessInstanced {
+
+    MaterialParameters {
+        ShaderStorageBufferObject TextureHandles
+        Boolean UseInstancing
+    }
+
+    Technique {
+        VertexShader GLSL430 : ScreenshotTests/Shaders/BindlessInstanced.vert
+        FragmentShader GLSL430 : ScreenshotTests/Shaders/BindlessInstanced.frag
+
+        WorldParameters {
+            WorldViewProjectionMatrix
+            ViewProjectionMatrix
+            ViewMatrix
+        }
+
+        Defines {
+            INSTANCING : UseInstancing
+        }
+    }
+}

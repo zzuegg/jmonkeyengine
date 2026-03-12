@@ -317,6 +317,7 @@ public final class AppSettings extends HashMap<String, Object> {
         defaults.put("MinHeight", 0);
         defaults.put("MinWidth", 0);
         defaults.put("GammaCorrection", true);
+        defaults.put("BindlessTextures", false);
         defaults.put("Resizable", false);
         defaults.put("SwapBuffers", true);
         defaults.put("OpenCL", false);
@@ -1057,6 +1058,21 @@ public final class AppSettings extends HashMap<String, Object> {
     }
 
     /**
+     * Enable or disable bindless texture support (GL_ARB_bindless_texture).
+     *
+     * <p>When enabled, texture handles are uploaded to shaders via
+     * {@code glUniformHandleui64ARB} instead of binding textures to
+     * texture units. This can reduce driver overhead for scenes with
+     * many textures. Requires hardware that supports
+     * {@code GL_ARB_bindless_texture}; otherwise the setting is ignored.</p>
+     *
+     * @param enabled true to enable, false to disable (default: false)
+     */
+    public void setBindlessTextures(boolean enabled) {
+        putBoolean("BindlessTextures", enabled);
+    }
+
+    /**
      * Get the frame rate.
      *
      * @return the maximum rate (in frames per second), or -1 for unlimited
@@ -1297,6 +1313,16 @@ public final class AppSettings extends HashMap<String, Object> {
      */
     public boolean isGammaCorrection() {
         return getBoolean("GammaCorrection");
+    }
+
+    /**
+     * Test whether bindless texture support is enabled.
+     *
+     * @return true if enabled, false if disabled
+     * @see #setBindlessTextures(boolean)
+     */
+    public boolean isBindlessTextures() {
+        return getBoolean("BindlessTextures");
     }
 
     /**

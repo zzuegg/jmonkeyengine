@@ -613,6 +613,11 @@ public class Image extends NativeObject implements Savable /*, Cloneable*/ {
     protected boolean needGeneratedMips = false;
     protected LastTextureState lastTextureState = new LastTextureState();
 
+    // Bindless texture state (ARB_bindless_texture)
+    protected long bindlessHandle = 0;
+    protected boolean bindlessResident = false;
+    protected int bindlessSamplerId = 0;
+
     /**
      * Internal use only.
      * The renderer stores the texture state set from the last texture,
@@ -688,11 +693,75 @@ public class Image extends NativeObject implements Savable /*, Cloneable*/ {
                 && (!FastMath.isPowerOfTwo(width) || !FastMath.isPowerOfTwo(height));
     }
     
+    /**
+     * Returns the bindless texture handle for this image.
+     * A non-zero value indicates that the handle has been obtained via
+     * {@code glGetTextureHandleARB}.
+     *
+     * @return the 64-bit bindless texture handle, or 0 if not yet obtained.
+     */
+    public long getBindlessHandle() {
+        return bindlessHandle;
+    }
+
+    /**
+     * Sets the bindless texture handle for this image.
+     * Internal use by the renderer only.
+     *
+     * @param handle the 64-bit bindless texture handle.
+     */
+    public void setBindlessHandle(long handle) {
+        this.bindlessHandle = handle;
+    }
+
+    /**
+     * Returns whether this image's bindless handle is currently resident.
+     *
+     * @return true if the bindless handle is resident.
+     */
+    public boolean isBindlessResident() {
+        return bindlessResident;
+    }
+
+    /**
+     * Sets the residency state of this image's bindless handle.
+     * Internal use by the renderer only.
+     *
+     * @param resident true if the handle has been made resident.
+     */
+    public void setBindlessResident(boolean resident) {
+        this.bindlessResident = resident;
+    }
+
+    /**
+     * Returns the GL sampler object ID associated with this image's bindless handle.
+     * When non-zero, the bindless handle was obtained via
+     * {@code glGetTextureSamplerHandleARB} with this sampler.
+     *
+     * @return the GL sampler object ID, or 0 if using the texture's embedded sampler.
+     */
+    public int getBindlessSamplerId() {
+        return bindlessSamplerId;
+    }
+
+    /**
+     * Sets the GL sampler object ID associated with this image's bindless handle.
+     * Internal use by the renderer only.
+     *
+     * @param samplerId the GL sampler object ID.
+     */
+    public void setBindlessSamplerId(int samplerId) {
+        this.bindlessSamplerId = samplerId;
+    }
+
     @Override
     public void resetObject() {
         this.id = -1;
         this.mipsWereGenerated = false;
         this.lastTextureState.reset();
+        this.bindlessHandle = 0;
+        this.bindlessResident = false;
+        this.bindlessSamplerId = 0;
         setUpdateNeeded();
     }
 

@@ -1,0 +1,21 @@
+MaterialDef BindlessUnshaded {
+
+    MaterialParameters {
+        Texture2D ColorMap
+    }
+
+    Technique {
+        VertexShader   GLSL150 :   ScreenshotTests/Shaders/BindlessUnshaded.vert
+        FragmentShader GLSL150 :   ScreenshotTests/Shaders/BindlessUnshaded.frag
+
+        WorldParameters {
+            WorldViewProjectionMatrix
+            ViewProjectionMatrix
+            ViewMatrix
+        }
+
+        Defines {
+            HAS_COLORMAP : ColorMap
+        }
+    }
+}
