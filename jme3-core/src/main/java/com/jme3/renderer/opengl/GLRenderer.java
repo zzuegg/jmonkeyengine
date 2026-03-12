@@ -1674,7 +1674,6 @@ public final class GLRenderer implements Renderer {
                 && !source.getSource().contains("GL_ARB_bindless_texture");
         if (injectBindless) {
             stringBuf.append("#extension GL_ARB_bindless_texture : require\n");
-            stringBuf.append("layout(bindless_sampler) uniform;\n");
         }
 
         if (linearizeSrgbImages) {
@@ -1683,7 +1682,49 @@ public final class GLRenderer implements Renderer {
         stringBuf.append("#define ").append(source.getType().name().toUpperCase()).append("_SHADER 1\n");
 
         stringBuf.append(source.getDefines());
-        stringBuf.append(source.getSource());
+
+        if (injectBindless) {
+            // Insert layout qualifier after all #extension/#import/preprocessor
+            // directives in the shader source, since GLSL requires #extension
+            // directives to appear before any non-preprocessor statements.
+            String src = source.getSource();
+            int insertPos = 0;
+            int lineStart = 0;
+            while (lineStart < src.length()) {
+                // Skip whitespace at the start of the line
+                int idx = lineStart;
+                while (idx < src.length() && (src.charAt(idx) == ' ' || src.charAt(idx) == '\t')) {
+                    idx++;
+                }
+                if (idx < src.length() && src.charAt(idx) == '#') {
+                    // Preprocessor line — skip past it
+                    int eol = src.indexOf('\n', lineStart);
+                    if (eol == -1) {
+                        insertPos = src.length();
+                        break;
+                    }
+                    insertPos = eol + 1;
+                    lineStart = eol + 1;
+                } else if (idx < src.length() && (src.charAt(idx) == '\n' || src.charAt(idx) == '\r')) {
+                    // Empty line — skip
+                    int eol = src.indexOf('\n', lineStart);
+                    if (eol == -1) {
+                        insertPos = src.length();
+                        break;
+                    }
+                    lineStart = eol + 1;
+                } else {
+                    // First non-preprocessor, non-empty line
+                    insertPos = lineStart;
+                    break;
+                }
+            }
+            stringBuf.append(src, 0, insertPos);
+            stringBuf.append("layout(bindless_sampler) uniform;\n");
+            stringBuf.append(src, insertPos, src.length());
+        } else {
+            stringBuf.append(source.getSource());
+        }
 
 
         intBuf1.clear();
