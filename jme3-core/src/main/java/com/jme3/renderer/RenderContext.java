@@ -272,6 +272,20 @@ public class RenderContext {
     public final WeakReference<BufferObject>[] boundBO = new WeakReference[maxBufferObjectUnits];
 
     /**
+     * Currently bound GL_DRAW_INDIRECT_BUFFER ID.
+     *
+     * @see GL4#GL_DRAW_INDIRECT_BUFFER
+     */
+    public int boundDrawIndirectBuffer;
+
+    /**
+     * Currently bound GL_PARAMETER_BUFFER ID.
+     *
+     * @see GL4#GL_PARAMETER_BUFFER
+     */
+    public int boundParameterBuffer;
+
+    /**
      * IDList for texture units.
      *
      * @see Renderer#setTexture(int, com.jme3.texture.Texture)
@@ -420,6 +434,8 @@ public class RenderContext {
      */
     public void reset() {
         init();
+        boundDrawIndirectBuffer = 0;
+        boundParameterBuffer = 0;
 
         for (int i = 0; i < boundTextures.length; i++) {
             boundTextures[i] = null;
