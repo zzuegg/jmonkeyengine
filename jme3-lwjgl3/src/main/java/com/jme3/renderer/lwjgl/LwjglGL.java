@@ -37,6 +37,8 @@ import com.jme3.renderer.opengl.GL3;
 import com.jme3.renderer.opengl.GL4;
 import com.jme3.renderer.opengl.GLFence;
 import org.lwjgl.opengl.*;
+import org.lwjgl.opengl.GL43;
+import org.lwjgl.opengl.GL46;
 
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
@@ -698,5 +700,35 @@ public class LwjglGL extends LwjglRender implements GL, GL2, GL3, GL4 {
     public void glUniformBlockBinding(final int program, final int uniformBlockIndex, final int uniformBlockBinding) {
         GL31.glUniformBlockBinding(program, uniformBlockIndex, uniformBlockBinding);
     }
-    
+
+    @Override
+    public void glDrawElementsIndirect(final int mode, final int type, final long indirect) {
+        GL43.glDrawElementsIndirect(mode, type, indirect);
+    }
+
+    @Override
+    public void glDrawArraysIndirect(final int mode, final long indirect) {
+        GL43.glDrawArraysIndirect(mode, indirect);
+    }
+
+    @Override
+    public void glMultiDrawElementsIndirect(final int mode, final int type, final long indirect, final int drawCount, final int stride) {
+        GL43.glMultiDrawElementsIndirect(mode, type, indirect, drawCount, stride);
+    }
+
+    @Override
+    public void glMultiDrawArraysIndirect(final int mode, final long indirect, final int drawCount, final int stride) {
+        GL43.glMultiDrawArraysIndirect(mode, indirect, drawCount, stride);
+    }
+
+    @Override
+    public void glMultiDrawElementsIndirectCount(final int mode, final int type, final long indirect, final long drawCount, final int maxDrawCount, final int stride) {
+        GL46.glMultiDrawElementsIndirectCount(mode, type, indirect, drawCount, maxDrawCount, stride);
+    }
+
+    @Override
+    public void glMultiDrawArraysIndirectCount(final int mode, final long indirect, final long drawCount, final int maxDrawCount, final int stride) {
+        GL46.glMultiDrawArraysIndirectCount(mode, indirect, drawCount, maxDrawCount, stride);
+    }
+
 }
