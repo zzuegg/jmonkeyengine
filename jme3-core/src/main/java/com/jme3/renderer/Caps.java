@@ -687,6 +687,11 @@ public enum Caps {
                             return false;
                         }
                         // fall through
+                    case 460:
+                        if (!caps.contains(Caps.GLSL460)) {
+                            return false;
+                        }
+                        break;
                     default:
                         return false;
                 }

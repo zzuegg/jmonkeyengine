@@ -312,12 +312,16 @@ public class MeshCombiner {
         int minLodLevels = Integer.MAX_VALUE;
         for (Entry entry : entries) {
             Mesh m = entry.mesh;
+            if (m.getMode() != Mesh.Mode.Triangles) {
+                throw new IllegalArgumentException(
+                        "MeshCombiner only supports Triangles mode, got " + m.getMode());
+            }
             if (m.getBuffer(Type.Index) == null) {
                 throw new IllegalArgumentException(
                         "All meshes must have an index buffer for MDI combining");
             }
             totalVerts += m.getVertexCount();
-            totalIndices += m.getTriangleCount() * 3;
+            totalIndices += m.getBuffer(Type.Index).getData().limit();
             minLodLevels = Math.min(minLodLevels, m.getNumLodLevels());
         }
         if (minLodLevels == Integer.MAX_VALUE) {
@@ -353,7 +357,7 @@ public class MeshCombiner {
         for (int lod = 0; lod < minLodLevels; lod++) {
             int total = 0;
             for (Entry entry : entries) {
-                total += entry.mesh.getTriangleCount(lod) * 3;
+                total += entry.mesh.getLodLevel(lod).getData().limit();
             }
             lodIndexData[lod] = allocIndexBuffer(total, use32Bit);
         }
@@ -371,14 +375,14 @@ public class MeshCombiner {
         for (Entry entry : entries) {
             Mesh inMesh = entry.mesh;
             int meshVertCount = inMesh.getVertexCount();
-            int meshIndexCount = inMesh.getTriangleCount() * 3;
+            int meshIndexCount = inMesh.getBuffer(Type.Index).getData().limit();
 
             // Base sub-mesh info
             baseInfos.add(new SubMeshInfo(meshIndexCount, baseIndexOffset, vertOffset));
 
             // LOD sub-mesh infos
             for (int lod = 0; lod < minLodLevels; lod++) {
-                int lodIdxCount = inMesh.getTriangleCount(lod) * 3;
+                int lodIdxCount = inMesh.getLodLevel(lod).getData().limit();
                 lodInfos.get(lod).add(
                         new SubMeshInfo(lodIdxCount, lodIndexOffsets[lod], vertOffset));
                 lodIndexOffsets[lod] += lodIdxCount;
@@ -392,8 +396,12 @@ public class MeshCombiner {
                 mat.setTransform(entry.transform.getTranslation(),
                         entry.transform.getScale(),
                         entry.transform.getRotation().toRotationMatrix());
+                // Normal matrix is the inverse-transpose of the upper-left 3x3.
+                // This correctly handles non-uniform scaling.
                 normalMat = mat.clone();
                 normalMat.setTranslation(0, 0, 0);
+                normalMat.invertLocal();
+                normalMat.transposeLocal();
             }
 
             // Copy positions
@@ -452,7 +460,7 @@ public class MeshCombiner {
             for (int lod = 0; lod < minLodLevels; lod++) {
                 VertexBuffer lodVb = inMesh.getLodLevel(lod);
                 IndexBuffer lodIdx = IndexBuffer.wrapIndexBuffer(lodVb.getData());
-                int lodCount = inMesh.getTriangleCount(lod) * 3;
+                int lodCount = inMesh.getLodLevel(lod).getData().limit();
                 copyIndices(lodIdx, lodCount, lodIndexData[lod], use32Bit);
             }
 

@@ -613,10 +613,29 @@ public class Image extends NativeObject implements Savable /*, Cloneable*/ {
     protected boolean needGeneratedMips = false;
     protected LastTextureState lastTextureState = new LastTextureState();
 
-    // Bindless texture state (ARB_bindless_texture)
-    protected long bindlessHandle = 0;
-    protected boolean bindlessResident = false;
-    protected int bindlessSamplerId = 0;
+    // Bindless texture state (ARB_bindless_texture).
+    // Multiple entries are needed when different Textures share this Image
+    // but use different sampler parameters — each combination produces a
+    // distinct bindless handle.
+    protected ArrayList<BindlessHandleEntry> bindlessEntries = null;
+
+    /**
+     * Holds a single bindless handle and its associated GL sampler object,
+     * keyed by a packed representation of the sampler state that produced it.
+     * <p>
+     * <b>Internal use by the renderer only.</b> Do not modify fields directly
+     * from application code — doing so may cause GPU resource leaks or crashes.
+     */
+    public static class BindlessHandleEntry {
+        public final long samplerKey;
+        public long handle;
+        public int samplerId;
+        public boolean resident;
+
+        public BindlessHandleEntry(long samplerKey) {
+            this.samplerKey = samplerKey;
+        }
+    }
 
     /**
      * Internal use only.
@@ -694,64 +713,64 @@ public class Image extends NativeObject implements Savable /*, Cloneable*/ {
     }
     
     /**
-     * Returns the bindless texture handle for this image.
-     * A non-zero value indicates that the handle has been obtained via
-     * {@code glGetTextureHandleARB}.
+     * Returns the bindless texture handle for the first (or only) sampler
+     * state registered on this image. Convenience for the common case where
+     * only one Texture uses this Image.
      *
-     * @return the 64-bit bindless texture handle, or 0 if not yet obtained.
+     * @return the 64-bit bindless texture handle, or 0 if none.
      */
     public long getBindlessHandle() {
-        return bindlessHandle;
+        if (bindlessEntries == null || bindlessEntries.isEmpty()) {
+            return 0;
+        }
+        return bindlessEntries.get(0).handle;
     }
 
     /**
-     * Sets the bindless texture handle for this image.
+     * Returns the bindless handle entry for the given sampler key, or null
+     * if no entry exists for that key.
      * Internal use by the renderer only.
      *
-     * @param handle the 64-bit bindless texture handle.
+     * @param samplerKey the packed sampler state key
+     * @return the entry, or null
      */
-    public void setBindlessHandle(long handle) {
-        this.bindlessHandle = handle;
+    public BindlessHandleEntry getBindlessEntry(long samplerKey) {
+        if (bindlessEntries == null) return null;
+        for (int i = 0; i < bindlessEntries.size(); i++) {
+            if (bindlessEntries.get(i).samplerKey == samplerKey) {
+                return bindlessEntries.get(i);
+            }
+        }
+        return null;
     }
 
     /**
-     * Returns whether this image's bindless handle is currently resident.
-     *
-     * @return true if the bindless handle is resident.
-     */
-    public boolean isBindlessResident() {
-        return bindlessResident;
-    }
-
-    /**
-     * Sets the residency state of this image's bindless handle.
+     * Returns or creates a bindless handle entry for the given sampler key.
      * Internal use by the renderer only.
      *
-     * @param resident true if the handle has been made resident.
+     * @param samplerKey the packed sampler state key
+     * @return the existing or new entry
      */
-    public void setBindlessResident(boolean resident) {
-        this.bindlessResident = resident;
+    public BindlessHandleEntry getOrCreateBindlessEntry(long samplerKey) {
+        BindlessHandleEntry entry = getBindlessEntry(samplerKey);
+        if (entry == null) {
+            entry = new BindlessHandleEntry(samplerKey);
+            if (bindlessEntries == null) {
+                bindlessEntries = new ArrayList<>(1);
+            }
+            bindlessEntries.add(entry);
+        }
+        return entry;
     }
 
     /**
-     * Returns the GL sampler object ID associated with this image's bindless handle.
-     * When non-zero, the bindless handle was obtained via
-     * {@code glGetTextureSamplerHandleARB} with this sampler.
+     * Returns all bindless handle entries, or null if none exist.
+     * Internal use by the renderer for cleanup.
      *
-     * @return the GL sampler object ID, or 0 if using the texture's embedded sampler.
+     * @return the list of entries, or null
      */
-    public int getBindlessSamplerId() {
-        return bindlessSamplerId;
-    }
-
-    /**
-     * Sets the GL sampler object ID associated with this image's bindless handle.
-     * Internal use by the renderer only.
-     *
-     * @param samplerId the GL sampler object ID.
-     */
-    public void setBindlessSamplerId(int samplerId) {
-        this.bindlessSamplerId = samplerId;
+    public ArrayList<BindlessHandleEntry> getBindlessEntries() {
+        return bindlessEntries;
     }
 
     @Override
@@ -759,9 +778,9 @@ public class Image extends NativeObject implements Savable /*, Cloneable*/ {
         this.id = -1;
         this.mipsWereGenerated = false;
         this.lastTextureState.reset();
-        this.bindlessHandle = 0;
-        this.bindlessResident = false;
-        this.bindlessSamplerId = 0;
+        if (this.bindlessEntries != null) {
+            this.bindlessEntries.clear();
+        }
         setUpdateNeeded();
     }
 
@@ -796,6 +815,7 @@ public class Image extends NativeObject implements Savable /*, Cloneable*/ {
         clone.mipMapSizes = mipMapSizes != null ? mipMapSizes.clone() : null;
         clone.data = data != null ? new ArrayList<ByteBuffer>(data) : null;
         clone.lastTextureState = new LastTextureState();
+        clone.bindlessEntries = null;
         clone.setUpdateNeeded();
         return clone;
     }

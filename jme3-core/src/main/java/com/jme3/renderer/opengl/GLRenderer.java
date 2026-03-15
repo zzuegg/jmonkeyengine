@@ -2881,78 +2881,75 @@ public final class GLRenderer implements Renderer {
     }
 
     /**
-     * Returns {@code true} if the desired sampling parameters on the
-     * {@link Texture} differ from what is currently cached on the
-     * {@link Image}'s {@link LastTextureState}.  Used to decide whether a
-     * bindless handle needs to be invalidated and re-obtained.
+     * Computes a packed key representing all sampler parameters that affect
+     * the bindless handle for a texture.  Two textures sharing the same
+     * {@link Image} but with different sampler parameters will produce
+     * different keys, and thus different bindless handles.
      */
-    private boolean needsSamplerStateUpdate(Texture tex, Image image) {
-        LastTextureState s = image.getLastTextureState();
-        if (s.magFilter != tex.getMagFilter()) return true;
-        if (s.minFilter != tex.getMinFilter()) return true;
-        if (s.sWrap != tex.getWrap(Texture.WrapAxis.S)) return true;
-        if (s.tWrap != tex.getWrap(Texture.WrapAxis.T)) return true;
-
-        int desiredAniso = tex.getAnisotropicFilter() == 0
+    private long computeSamplerKey(Texture tex) {
+        long key = 0;
+        key |= (long) tex.getMagFilter().ordinal();
+        key |= (long) tex.getMinFilter().ordinal() << 4;
+        key |= (long) tex.getWrap(Texture.WrapAxis.S).ordinal() << 8;
+        key |= (long) tex.getWrap(Texture.WrapAxis.T).ordinal() << 12;
+        if (tex.getType() == Texture.Type.ThreeDimensional || tex.getType() == Texture.Type.CubeMap) {
+            key |= (long) tex.getWrap(Texture.WrapAxis.R).ordinal() << 16;
+        }
+        int aniso = tex.getAnisotropicFilter() == 0
                 ? defaultAnisotropicFilter : tex.getAnisotropicFilter();
-        if (caps.contains(Caps.TextureFilterAnisotropic)
-                && s.anisoFilter != desiredAniso) return true;
-
-        if (s.shadowCompareMode != tex.getShadowCompareMode()) return true;
-        return false;
+        key |= (long) (aniso & 0xFF) << 20;
+        key |= (long) tex.getShadowCompareMode().ordinal() << 28;
+        return key;
     }
 
     /**
-     * Creates or updates the bindless handle for the given texture, using a
-     * GL sampler object to encapsulate the desired sampling parameters.
-     * When sampling parameters change at runtime, a new sampler object and
-     * handle are created (the old ones are cleaned up).
+     * Creates or retrieves the bindless handle for the given texture's
+     * sampler state.  Each distinct sampler configuration on the same
+     * {@link Image} gets its own handle entry, so multiple {@link Texture}
+     * objects sharing an Image with different sampler parameters work correctly.
+     * <p>
+     * When a texture's sampler parameters change at runtime, a new entry is
+     * created for the new sampler key. Old entries remain resident and are
+     * reused if the sampler state switches back. They are cleaned up when
+     * the Image is deleted via {@link #deleteImage(Image)}.
      */
     private void updateBindlessHandle(int unit, Texture tex, Image image) {
-        if (image.getBindlessHandle() == 0) {
-            // First time: set up texture params on the GL texture (safe, no
-            // handle exists yet), then obtain the initial handle.
+        long samplerKey = computeSamplerKey(tex);
+        Image.BindlessHandleEntry entry = image.getBindlessEntry(samplerKey);
+
+        if (entry != null && entry.handle != 0) {
+            // Existing handle for this sampler configuration — reuse it.
+            context.bindlessHandles[unit] = entry.handle;
+            return;
+        }
+
+        if (entry == null) {
+            entry = image.getOrCreateBindlessEntry(samplerKey);
+        }
+
+        // First time for this sampler state on this image.
+        // If no other handles exist yet, we can set up texture params
+        // directly on the GL texture and use the simple handle path.
+        if (image.getBindlessEntries().size() == 1 && entry.handle == 0) {
             setupTextureParams(unit, tex);
             long handle = glext.glGetTextureHandleARB(image.getId());
-            image.setBindlessHandle(handle);
+            entry.handle = handle;
             glext.glMakeTextureHandleResidentARB(handle);
-            image.setBindlessResident(true);
+            entry.resident = true;
             context.bindlessHandles[unit] = handle;
-            updateLastTextureStateForBindless(tex, image);
             return;
         }
 
-        if (!needsSamplerStateUpdate(tex, image)) {
-            // No sampler change — reuse existing handle.
-            context.bindlessHandles[unit] = image.getBindlessHandle();
-            return;
-        }
-
-        // Sampler state changed at runtime.  Create a new sampler object
-        // with the updated params and obtain a new texture+sampler handle
-        // via glGetTextureSamplerHandleARB.  The old handle is made
-        // non-resident first (a handle must be non-resident before a new
-        // one for the same texture can be made resident).
-        if (image.isBindlessResident()) {
-            glext.glMakeTextureHandleNonResidentARB(image.getBindlessHandle());
-            image.setBindlessResident(false);
-        }
-
-        // Create new sampler object before deleting the old one to ensure
-        // a different GL name, which guarantees a different handle.
+        // Additional sampler state (or re-creation): use a GL sampler object
+        // to obtain a texture+sampler handle.
         int newSamplerId = createBindlessSampler(tex);
-        int oldSamplerId = image.getBindlessSamplerId();
-        if (oldSamplerId != 0) {
-            glext.glDeleteSamplers(oldSamplerId);
-        }
-        image.setBindlessSamplerId(newSamplerId);
+        entry.samplerId = newSamplerId;
 
         long handle = glext.glGetTextureSamplerHandleARB(image.getId(), newSamplerId);
-        image.setBindlessHandle(handle);
+        entry.handle = handle;
         glext.glMakeTextureHandleResidentARB(handle);
-        image.setBindlessResident(true);
+        entry.resident = true;
         context.bindlessHandles[unit] = handle;
-        updateLastTextureStateForBindless(tex, image);
     }
 
     /**
@@ -3006,23 +3003,6 @@ public final class GLRenderer implements Renderer {
         return sampler;
     }
 
-    /**
-     * Updates the {@link LastTextureState} cache to match the current
-     * sampling parameters of the texture, for use with bindless handle tracking.
-     */
-    private void updateLastTextureStateForBindless(Texture tex, Image image) {
-        LastTextureState s = image.getLastTextureState();
-        s.magFilter = tex.getMagFilter();
-        s.minFilter = tex.getMinFilter();
-        s.sWrap = tex.getWrap(Texture.WrapAxis.S);
-        s.tWrap = tex.getWrap(Texture.WrapAxis.T);
-
-        int desiredAniso = tex.getAnisotropicFilter() == 0
-                ? defaultAnisotropicFilter : tex.getAnisotropicFilter();
-        s.anisoFilter = desiredAniso;
-        s.shadowCompareMode = tex.getShadowCompareMode();
-    }
-    
     @Override
     public void setTextureImage(int unit, TextureImage tex) throws TextureUnitException {
         if (unit < 0 || unit >= RenderContext.maxTextureUnits) {
@@ -3126,14 +3106,18 @@ public final class GLRenderer implements Renderer {
     public void deleteImage(Image image) {
         int texId = image.getId();
         if (texId != -1) {
-            // Make bindless handle non-resident before deleting
-            if (image.isBindlessResident()) {
-                glext.glMakeTextureHandleNonResidentARB(image.getBindlessHandle());
-            }
-
-            // Delete associated sampler object
-            if (image.getBindlessSamplerId() != 0) {
-                glext.glDeleteSamplers(image.getBindlessSamplerId());
+            // Make all bindless handles non-resident and delete sampler objects
+            ArrayList<Image.BindlessHandleEntry> entries = image.getBindlessEntries();
+            if (entries != null) {
+                for (int i = 0; i < entries.size(); i++) {
+                    Image.BindlessHandleEntry entry = entries.get(i);
+                    if (entry.resident) {
+                        glext.glMakeTextureHandleNonResidentARB(entry.handle);
+                    }
+                    if (entry.samplerId != 0) {
+                        glext.glDeleteSamplers(entry.samplerId);
+                    }
+                }
             }
 
             intBuf1.put(0, texId);
@@ -3432,9 +3416,6 @@ public final class GLRenderer implements Renderer {
         setupMeshVertexAttribs(mesh);
         bindDrawIndirectBuffer(commandBuffer);
 
-        // Memory barrier for GPU-written command buffers
-        gl4.glMemoryBarrier(GL4.GL_COMMAND_BARRIER_BIT);
-
         int mode = convertElementMode(mesh.getMode());
         int indexFormat = bindMeshIndexBuffer(mesh);
 
@@ -3444,6 +3425,7 @@ public final class GLRenderer implements Renderer {
             gl4.glDrawArraysIndirect(mode, byteOffset);
         }
 
+        statistics.onMeshDrawn(mesh, 0);
         clearVertexAttribs();
     }
 
@@ -3451,14 +3433,14 @@ public final class GLRenderer implements Renderer {
     public void renderMeshMultiIndirect(Mesh mesh, BufferObject commandBuffer, int drawCount, long byteOffset) {
         if (mesh == null) throw new IllegalArgumentException("mesh must not be null");
         if (commandBuffer == null) throw new IllegalArgumentException("commandBuffer must not be null");
+        if (drawCount < 0) throw new IllegalArgumentException("drawCount must not be negative");
         if (!caps.contains(Caps.MultiDrawIndirect)) {
             throw new RendererException("Multi-draw indirect not supported by the video hardware");
         }
+        if (drawCount == 0) return;
 
         setupMeshVertexAttribs(mesh);
         bindDrawIndirectBuffer(commandBuffer);
-
-        gl4.glMemoryBarrier(GL4.GL_COMMAND_BARRIER_BIT);
 
         int mode = convertElementMode(mesh.getMode());
         int indexFormat = bindMeshIndexBuffer(mesh);
@@ -3469,6 +3451,9 @@ public final class GLRenderer implements Renderer {
             gl4.glMultiDrawArraysIndirect(mode, byteOffset, drawCount, 0);
         }
 
+        // Note: we pass count=1 because the per-draw triangle counts are
+        // defined in the indirect command buffer, not derivable from the mesh.
+        statistics.onMeshDrawn(mesh, 0);
         clearVertexAttribs();
     }
 
@@ -3478,6 +3463,7 @@ public final class GLRenderer implements Renderer {
         if (mesh == null) throw new IllegalArgumentException("mesh must not be null");
         if (commandBuffer == null) throw new IllegalArgumentException("commandBuffer must not be null");
         if (countBuffer == null) throw new IllegalArgumentException("countBuffer must not be null");
+        if (maxDrawCount < 0) throw new IllegalArgumentException("maxDrawCount must not be negative");
         if (!caps.contains(Caps.MultiDrawIndirectCount)) {
             throw new RendererException("Multi-draw indirect count not supported by the video hardware");
         }
@@ -3486,6 +3472,8 @@ public final class GLRenderer implements Renderer {
         bindDrawIndirectBuffer(commandBuffer);
         bindParameterBuffer(countBuffer);
 
+        // GPU-driven path: the count buffer and command buffer may have been
+        // written by a compute shader, so issue a memory barrier.
         gl4.glMemoryBarrier(GL4.GL_COMMAND_BARRIER_BIT);
 
         int mode = convertElementMode(mesh.getMode());
@@ -3497,6 +3485,8 @@ public final class GLRenderer implements Renderer {
             gl4.glMultiDrawArraysIndirectCount(mode, byteOffset, 0, maxDrawCount, 0);
         }
 
+        // Actual draw count is GPU-determined; use 1 to avoid misleading stats.
+        statistics.onMeshDrawn(mesh, 0);
         clearVertexAttribs();
     }
 
