@@ -31,6 +31,7 @@
  */
 package com.jme3.renderer;
 
+import com.jme3.renderer.indirect.IndirectCommandBuffer;
 import com.jme3.renderer.pipeline.ForwardPipeline;
 import com.jme3.renderer.pipeline.DefaultPipelineContext;
 import com.jme3.renderer.pipeline.RenderPipeline;
@@ -831,6 +832,90 @@ public class RenderManager {
         } else {
             material.render(geom, lightList, this);
         }
+        this.renderer.popDebugGroup();
+    }
+
+    /**
+     * Renders a {@link Geometry} using multi-draw indirect with the given
+     * command buffer. This follows the same state setup as
+     * {@link #renderGeometry(Geometry)}: forced technique, forced material,
+     * render filter, light filter, world matrix, debug groups, and
+     * BoundDrawBuffer are all respected.
+     * <p>
+     * The geometry's mesh defines the vertex format and buffers. The command
+     * buffer provides the draw commands (one per sub-mesh). Per-draw data
+     * (transforms, texture handles) should be provided via SSBOs set on the
+     * material, indexed by {@code gl_DrawID} in the shader.
+     *
+     * @param geom The geometry providing mesh, material, and scene graph state
+     * @param commandBuffer The indirect command buffer with draw commands
+     */
+    public void renderGeometryIndirect(Geometry geom, IndirectCommandBuffer commandBuffer) {
+        if (renderFilter != null && !renderFilter.test(geom)) {
+            return;
+        }
+
+        LightList lightList = geom.getWorldLightList();
+        if (lightFilter != null) {
+            filteredLightList.clear();
+            lightFilter.filterLights(geom, filteredLightList);
+            lightList = filteredLightList;
+        }
+
+        this.renderer.pushDebugGroup(geom.getName());
+        if (geom.isIgnoreTransform()) {
+            setWorldMatrix(Matrix4f.IDENTITY);
+        } else {
+            setWorldMatrix(geom.getWorldMatrix());
+        }
+
+        // BoundDrawBuffer for ES compatibility
+        FrameBuffer currentFb = this.renderer.getCurrentFrameBuffer();
+        if (currentFb != null && !currentFb.isMultiTarget()) {
+            this.boundDrawBufferId.setValue(currentFb.getTargetIndex());
+        }
+
+        Material material = geom.getMaterial();
+
+        if (forcedTechnique != null) {
+            MaterialDef matDef = material.getMaterialDef();
+            if (matDef.getTechniqueDefs(forcedTechnique) != null) {
+                Technique activeTechnique = material.getActiveTechnique();
+                String previousTechniqueName = activeTechnique != null
+                        ? activeTechnique.getDef().getName()
+                        : TechniqueDef.DEFAULT_TECHNIQUE_NAME;
+
+                material.selectTechnique(forcedTechnique, this);
+                RenderState tmpRs = forcedRenderState;
+                if (material.getActiveTechnique().getDef().getForcedRenderState() != null) {
+                    forcedRenderState = material.getActiveTechnique().getDef().getForcedRenderState();
+                }
+
+                material.applyState(geom, lightList, this);
+                renderer.renderMeshMultiIndirect(geom.getMesh(),
+                        commandBuffer.getBufferObject(),
+                        commandBuffer.getCommandCount(), 0);
+
+                material.selectTechnique(previousTechniqueName, this);
+                forcedRenderState = tmpRs;
+            } else if (forcedMaterial != null) {
+                forcedMaterial.applyState(geom, lightList, this);
+                renderer.renderMeshMultiIndirect(geom.getMesh(),
+                        commandBuffer.getBufferObject(),
+                        commandBuffer.getCommandCount(), 0);
+            }
+        } else if (forcedMaterial != null) {
+            forcedMaterial.applyState(geom, lightList, this);
+            renderer.renderMeshMultiIndirect(geom.getMesh(),
+                    commandBuffer.getBufferObject(),
+                    commandBuffer.getCommandCount(), 0);
+        } else {
+            material.applyState(geom, lightList, this);
+            renderer.renderMeshMultiIndirect(geom.getMesh(),
+                    commandBuffer.getBufferObject(),
+                    commandBuffer.getCommandCount(), 0);
+        }
+
         this.renderer.popDebugGroup();
     }
 

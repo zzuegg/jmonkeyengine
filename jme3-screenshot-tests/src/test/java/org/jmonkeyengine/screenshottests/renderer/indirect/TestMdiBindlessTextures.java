@@ -243,14 +243,8 @@ public class TestMdiBindlessTextures extends ScreenshotTestBase {
 
                     @Override
                     public void postQueue(RenderQueue rq) {
-                        Renderer r = rm.getRenderer();
-                        rm.renderGeometry(geom);
-                        r.clearBuffers(true, true, true);
-                        r.renderMeshMultiIndirect(
-                                combinedMesh,
-                                cmdBuf.getBufferObject(),
-                                cmdBuf.getCommandCount(),
-                                0);
+                        rm.getRenderer().clearBuffers(true, true, true);
+                        rm.renderGeometryIndirect(geom, cmdBuf);
                         rq.clear();
                     }
 

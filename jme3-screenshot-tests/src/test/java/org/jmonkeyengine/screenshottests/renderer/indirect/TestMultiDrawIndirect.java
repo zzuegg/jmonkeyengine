@@ -42,7 +42,6 @@ import com.jme3.post.SceneProcessor;
 import com.jme3.profile.AppProfiler;
 import com.jme3.renderer.Caps;
 import com.jme3.renderer.RenderManager;
-import com.jme3.renderer.Renderer;
 import com.jme3.renderer.ViewPort;
 import com.jme3.renderer.indirect.IndirectCommandBuffer;
 import com.jme3.renderer.indirect.MeshCombiner;
@@ -150,20 +149,10 @@ public class TestMultiDrawIndirect extends ScreenshotTestBase {
 
                         @Override
                         public void postQueue(RenderQueue rq) {
-                            Renderer renderer = rm.getRenderer();
-
-                            // Establish GL state (shader, uniforms, render state)
-                            rm.renderGeometry(geom);
-
-                            // Clear framebuffer — only the indirect draw will be visible
-                            renderer.clearBuffers(true, true, true);
+                            rm.getRenderer().clearBuffers(true, true, true);
 
                             // Issue multi-draw indirect: 3 objects in 1 call
-                            renderer.renderMeshMultiIndirect(
-                                    combinedMesh,
-                                    finalCmdBuf.getBufferObject(),
-                                    finalCmdBuf.getCommandCount(),
-                                    0);
+                            rm.renderGeometryIndirect(geom, finalCmdBuf);
 
                             // Clear queue so flushQueue renders nothing
                             rq.clear();

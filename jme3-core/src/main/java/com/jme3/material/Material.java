@@ -1086,16 +1086,62 @@ public class Material implements CloneableSmartAsset, Cloneable, Savable {
      * @param renderManager The render manager requesting the rendering
      */
     public void render(Geometry geometry, LightList lights, RenderManager renderManager) {
+        Shader shader = applyStateInternal(geometry, lights, renderManager);
+        if (shader == null) {
+            return; // noRender technique
+        }
+
+        // Delegate rendering to the technique
+        technique.render(renderManager, shader, geometry, lights,
+                lastApplyStateBindUnits);
+    }
+
+    /**
+     * Applies all material state (technique selection, shader compilation,
+     * render state, uniform bindings, material parameters) without issuing
+     * a draw call. After this call, the GPU is ready for a custom draw
+     * command such as {@link Renderer#renderMeshMultiIndirect}.
+     * <p>
+     * Lights are obtained from the geometry's scene graph. If light filtering
+     * is needed, use {@link RenderManager#renderGeometryIndirect} which
+     * handles filtering before calling this method.
+     *
+     * @param geometry The geometry providing lights, world overrides, and render context
+     * @param renderManager The render manager
+     */
+    public void applyState(Geometry geometry, RenderManager renderManager) {
+        applyStateInternal(geometry, geometry.getWorldLightList(), renderManager);
+    }
+
+    /**
+     * Applies material state with an explicit light list.
+     * Use this when lights have been pre-filtered (e.g. by
+     * {@link RenderManager#renderGeometryIndirect}).
+     *
+     * @param geometry The geometry providing world overrides and render context
+     * @param lights The pre-filtered light list
+     * @param renderManager The render manager
+     */
+    public void applyState(Geometry geometry, LightList lights, RenderManager renderManager) {
+        applyStateInternal(geometry, lights, renderManager);
+    }
+
+    /**
+     * Internal state application used by both {@link #render} and {@link #applyState}.
+     * Takes an explicit light list so {@code render()} can pass the pre-filtered list
+     * from {@link RenderManager#renderGeometry}.
+     */
+    private Shader applyStateInternal(Geometry geometry, LightList lights, RenderManager renderManager) {
         if (technique == null) {
             selectTechnique(TechniqueDef.DEFAULT_TECHNIQUE_NAME, renderManager);
         }
-        
+
         TechniqueDef techniqueDef = technique.getDef();
         Renderer renderer = renderManager.getRenderer();
         EnumSet<Caps> rendererCaps = renderer.getCaps();
-        
+
         if (techniqueDef.isNoRender()) {
-            return;
+            return null;
         }
 
         // Apply render state
@@ -1106,22 +1152,29 @@ public class Material implements CloneableSmartAsset, Cloneable, Savable {
 
         // Select shader to use
         Shader shader = technique.makeCurrent(renderManager, overrides, renderManager.getForcedMatParams(), lights, rendererCaps);
-        
+
         // Begin tracking which uniforms were changed by material.
         clearUniformsSetByCurrent(shader);
-        
+
         // Set uniform bindings
         renderManager.updateUniformBindings(shader);
-        
+
         // Set material parameters
-        BindUnits units = updateShaderMaterialParameters(renderer, shader, overrides, renderManager.getForcedMatParams());
+        lastApplyStateBindUnits = updateShaderMaterialParameters(renderer, shader, overrides, renderManager.getForcedMatParams());
 
         // Clear any uniforms not changed by material.
         resetUniformsNotSetByCurrent(shader);
-        
-        // Delegate rendering to the technique
-        technique.render(renderManager, shader, geometry, lights, units);
+
+        // Bind the shader program. For regular rendering this is also done
+        // inside TechniqueDefLogic.render(), but for indirect/compute dispatch
+        // the caller bypasses TechniqueDefLogic so we must bind here.
+        renderer.setShader(shader);
+
+        return shader;
     }
+
+    // Cached between applyState() and render() to avoid recomputing
+    private BindUnits lastApplyStateBindUnits;
 
     /**
      * Called by {@link RenderManager} to render the geometry by
