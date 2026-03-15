@@ -1,0 +1,16 @@
+MaterialDef MdiBindless {
+
+    MaterialParameters {
+        ShaderStorageBufferObject TextureHandles
+        ShaderStorageBufferObject DrawTransforms
+    }
+
+    Technique {
+        VertexShader GLSL460 : ScreenshotTests/Shaders/MdiBindless.vert
+        FragmentShader GLSL460 : ScreenshotTests/Shaders/MdiBindless.frag
+
+        WorldParameters {
+            ViewProjectionMatrix
+        }
+    }
+}

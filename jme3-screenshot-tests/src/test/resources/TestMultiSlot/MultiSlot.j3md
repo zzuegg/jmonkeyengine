@@ -1,0 +1,15 @@
+MaterialDef MultiSlot {
+
+    MaterialParameters {
+        Int BoundDrawBuffer
+    }
+
+    Technique {
+        VertexShader   GLSL150 :   TestMultiSlot/MultiSlot.vert
+        FragmentShader GLSL150 :   TestMultiSlot/MultiSlot.frag
+
+        WorldParameters {
+            WorldViewProjectionMatrix
+        }
+    }
+}

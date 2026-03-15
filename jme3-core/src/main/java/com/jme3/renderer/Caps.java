@@ -134,6 +134,10 @@ public enum Caps {
      */
     OpenGL45,
     /**
+     * Supports OpenGL 4.6.
+     */
+    OpenGL46,
+    /**
      * Do not use.
      *
      * @deprecated do not use.
@@ -199,6 +203,10 @@ public enum Caps {
      * Supports GLSL 4.5.
      */
     GLSL450,
+    /**
+     * Supports GLSL 4.6.
+     */
+    GLSL460,
     /**
      * Supports reading from textures inside the vertex shader.
      */
@@ -459,7 +467,38 @@ public enum Caps {
     /**
      * Supports debugging capabilities
      */
-    GLDebug
+    GLDebug,
+
+    /**
+     * Supports multi-draw indirect commands (GL_ARB_multi_draw_indirect).
+     * Core in OpenGL 4.3. Enables {@code glDrawElementsIndirect},
+     * {@code glDrawArraysIndirect}, {@code glMultiDrawElementsIndirect},
+     * and {@code glMultiDrawArraysIndirect}.
+     */
+    MultiDrawIndirect,
+
+    /**
+     * Supports multi-draw indirect count commands (GL_ARB_indirect_parameters).
+     * Core in OpenGL 4.6. Enables {@code glMultiDrawElementsIndirectCount}
+     * and {@code glMultiDrawArraysIndirectCount}.
+     */
+    MultiDrawIndirectCount,
+
+    /**
+     * Supports bindless textures (GL_ARB_bindless_texture).
+     *
+     * <p>When available, texture handles can be passed directly to shaders
+     * instead of binding textures to texture units, removing the texture
+     * unit limit and reducing CPU overhead from state changes.
+     *
+     * <p>Not supported on Intel iGPUs, macOS, or OpenGL ES.
+     */
+    BindlessTexture,
+
+    /**
+     * Supports compute shaders (OpenGL 4.3+).
+     */
+    ComputeShader
     ;
 
     /**
@@ -653,6 +692,11 @@ public enum Caps {
                             return false;
                         }
                         // fall through
+                    case 460:
+                        if (!caps.contains(Caps.GLSL460)) {
+                            return false;
+                        }
+                        break;
                     default:
                         return false;
                 }

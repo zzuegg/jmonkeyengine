@@ -94,4 +94,19 @@ public interface TechniqueDefLogic {
      * @param lastTexUnit the index of the most recently used texture unit
      */
     public void render(RenderManager renderManager, Shader shader, Geometry geometry, LightList lights, BindUnits lastBindUnits);
+
+    /**
+     * Dispatches a compute shader. Only supported by compute techniques.
+     *
+     * @param renderManager The render manager to dispatch against.
+     * @param shader The shader selected by makeCurrent.
+     * @param numGroupsX work groups in X
+     * @param numGroupsY work groups in Y
+     * @param numGroupsZ work groups in Z
+     */
+    default void dispatch(RenderManager renderManager, Shader shader,
+                          int numGroupsX, int numGroupsY, int numGroupsZ) {
+        throw new UnsupportedOperationException(
+            "This technique does not support compute dispatch. Use a compute-only technique.");
+    }
 }

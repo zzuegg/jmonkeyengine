@@ -33,6 +33,12 @@ package com.jme3.material;
 
 import com.jme3.asset.AssetManager;
 import com.jme3.export.*;
+import com.jme3.material.logic.ComputeTechniqueDefLogic;
+import com.jme3.material.logic.DefaultTechniqueDefLogic;
+import com.jme3.material.logic.MultiPassLightingLogic;
+import com.jme3.material.logic.SinglePassAndImageBasedLightingLogic;
+import com.jme3.material.logic.SinglePassLightingLogic;
+import com.jme3.material.logic.StaticPassLightingLogic;
 import com.jme3.material.logic.TechniqueDefLogic;
 import com.jme3.renderer.Caps;
 import com.jme3.shader.*;
@@ -548,8 +554,21 @@ public class TechniqueDef implements Savable, Cloneable {
                 requiredCaps.add(Caps.GeometryShader);
             } else if (shaderType.equals(Shader.ShaderType.TessellationControl)) {
                 requiredCaps.add(Caps.TesselationShader);
+            } else if (shaderType.equals(Shader.ShaderType.Compute)) {
+                requiredCaps.add(Caps.ComputeShader);
             }
         }
+    }
+
+    /**
+     * Returns true if this technique defines only a compute shader
+     * (no vertex, fragment, geometry, or tessellation shaders).
+     *
+     * @return true for compute-only techniques
+     */
+    public boolean isComputeOnly() {
+        return shaderNames.containsKey(Shader.ShaderType.Compute)
+            && shaderNames.size() == 1;
     }
 
     /**
@@ -659,11 +678,13 @@ public class TechniqueDef implements Savable, Cloneable {
         oc.write(shaderNames.get(Shader.ShaderType.Geometry), "geomName", null);
         oc.write(shaderNames.get(Shader.ShaderType.TessellationControl), "tsctrlName", null);
         oc.write(shaderNames.get(Shader.ShaderType.TessellationEvaluation), "tsevalName", null);
+        oc.write(shaderNames.get(Shader.ShaderType.Compute), "compName", null);
         oc.write(shaderLanguages.get(Shader.ShaderType.Vertex), "vertLanguage", null);
         oc.write(shaderLanguages.get(Shader.ShaderType.Fragment), "fragLanguage", null);
         oc.write(shaderLanguages.get(Shader.ShaderType.Geometry), "geomLanguage", null);
         oc.write(shaderLanguages.get(Shader.ShaderType.TessellationControl), "tsctrlLanguage", null);
         oc.write(shaderLanguages.get(Shader.ShaderType.TessellationEvaluation), "tsevalLanguage", null);
+        oc.write(shaderLanguages.get(Shader.ShaderType.Compute), "compLanguage", null);
 
         oc.write(shaderPrologue, "shaderPrologue", null);
         oc.write(lightMode, "lightMode", LightMode.Disable);
@@ -690,6 +711,10 @@ public class TechniqueDef implements Savable, Cloneable {
         shaderNames.put(Shader.ShaderType.Geometry,ic.readString("geomName", null));
         shaderNames.put(Shader.ShaderType.TessellationControl,ic.readString("tsctrlName", null));
         shaderNames.put(Shader.ShaderType.TessellationEvaluation,ic.readString("tsevalName", null));
+        shaderNames.put(Shader.ShaderType.Compute,ic.readString("compName", null));
+        // EnumMap.put(key, null) sets containsKey=true — remove nulls so
+        // size() and containsKey() reflect only actually-present shader types.
+        shaderNames.values().removeIf(Objects::isNull);
         shaderPrologue = ic.readString("shaderPrologue", null);
         lightMode = ic.readEnum("lightMode", LightMode.class, LightMode.Disable);
         shadowMode = ic.readEnum("shadowMode", ShadowMode.class, ShadowMode.Disable);
@@ -707,11 +732,39 @@ public class TechniqueDef implements Savable, Cloneable {
             shaderLanguages.put(Shader.ShaderType.Geometry,ic.readString("geomLanguage", null));
             shaderLanguages.put(Shader.ShaderType.TessellationControl,ic.readString("tsctrlLanguage", null));
             shaderLanguages.put(Shader.ShaderType.TessellationEvaluation,ic.readString("tsevalLanguage", null));
+            shaderLanguages.put(Shader.ShaderType.Compute,ic.readString("compLanguage", null));
         }
+        shaderLanguages.values().removeIf(Objects::isNull);
 
         usesNodes = ic.readBoolean("usesNodes", false);
         shaderNodes = ic.readSavableArrayList("shaderNodes", null);
         shaderGenerationInfo = (ShaderGenerationInfo) ic.readSavable("shaderGenerationInfo", null);
+
+        // Reconstruct logic based on shader types and light mode
+        if (isComputeOnly()) {
+            logic = new ComputeTechniqueDefLogic(this);
+        } else if (logic == null) {
+            switch (lightMode) {
+                case Disable:
+                    logic = new DefaultTechniqueDefLogic(this);
+                    break;
+                case MultiPass:
+                    logic = new MultiPassLightingLogic(this);
+                    break;
+                case SinglePass:
+                    logic = new SinglePassLightingLogic(this);
+                    break;
+                case StaticPass:
+                    logic = new StaticPassLightingLogic(this);
+                    break;
+                case SinglePassAndImageBased:
+                    logic = new SinglePassAndImageBasedLightingLogic(this);
+                    break;
+                default:
+                    logic = new DefaultTechniqueDefLogic(this);
+                    break;
+            }
+        }
     }
 
     public List<ShaderNode> getShaderNodes() {

@@ -96,7 +96,12 @@ public final class Shader extends NativeObject {
          * Controls tessellation transform (e.g. similar to the vertex shader, but
          * required to mix inputs manual)
          */
-        TessellationEvaluation("tseval");
+        TessellationEvaluation("tseval"),
+        /**
+         * General-purpose compute shader. Not part of the rendering pipeline.
+         * Requires OpenGL 4.3+.
+         */
+        Compute("comp");
 
         private String extension;
 
@@ -233,6 +238,23 @@ public final class Shader extends NativeObject {
         bufferBlocks = new ListMap<>();
         attribs = new IntMap<>();
         boundUniforms = new ArrayList<>();
+    }
+
+    /**
+     * Creates a compute-only Shader from GLSL source.
+     * Convenience for code that doesn't use the Material system.
+     *
+     * @param name asset path (for debugging/identification)
+     * @param source GLSL compute shader source code
+     * @param defines preprocessor defines (may be null)
+     * @param language GLSL language version (e.g. "GLSL430")
+     * @return a Shader containing one Compute source
+     */
+    public static Shader createComputeShader(String name, String source,
+                                              String defines, String language) {
+        Shader shader = new Shader();
+        shader.addSource(ShaderType.Compute, name, source, defines, language);
+        return shader;
     }
 
     /**

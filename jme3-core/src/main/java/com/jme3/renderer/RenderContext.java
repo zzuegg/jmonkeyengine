@@ -262,6 +262,13 @@ public class RenderContext {
     public final WeakReference<Image> boundTextures[]
             = new WeakReference[maxTextureUnits];
 
+    /**
+     * Bindless texture handles for each texture unit.
+     * Non-zero values indicate a valid bindless handle is available for that unit.
+     * Used when {@link Caps#BindlessTexture} is supported to pass handles
+     * directly to shaders via {@code glUniformHandleui64ARB}.
+     */
+    public final long[] bindlessHandles = new long[maxTextureUnits];
 
     /**
      * Current bound buffer object IDs for each buffer object unit.
@@ -270,6 +277,20 @@ public class RenderContext {
      * @see Renderer#setShaderStorageBufferObject(int, com.jme3.shader.BufferObject)
      */
     public final WeakReference<BufferObject>[] boundBO = new WeakReference[maxBufferObjectUnits];
+
+    /**
+     * Currently bound GL_DRAW_INDIRECT_BUFFER ID.
+     *
+     * @see GL4#GL_DRAW_INDIRECT_BUFFER
+     */
+    public int boundDrawIndirectBuffer;
+
+    /**
+     * Currently bound GL_PARAMETER_BUFFER ID.
+     *
+     * @see GL4#GL_PARAMETER_BUFFER
+     */
+    public int boundParameterBuffer;
 
     /**
      * IDList for texture units.
@@ -420,9 +441,12 @@ public class RenderContext {
      */
     public void reset() {
         init();
+        boundDrawIndirectBuffer = 0;
+        boundParameterBuffer = 0;
 
         for (int i = 0; i < boundTextures.length; i++) {
             boundTextures[i] = null;
+            bindlessHandles[i] = 0;
         }
 
         textureIndexList.reset();

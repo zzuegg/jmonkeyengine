@@ -46,7 +46,12 @@ import java.nio.IntBuffer;
  * A compute shader for general-purpose GPU computing (GPGPU).
  * <p>
  * Compute shaders require OpenGL 4.3 or higher.
+ *
+ * @deprecated Use {@link com.jme3.shader.Shader} with
+ * {@link com.jme3.shader.Shader.ShaderType#Compute} and
+ * {@link com.jme3.material.Material#dispatch} instead.
  */
+@Deprecated
 public class ComputeShader extends NativeObject {
 
     private final GL4 gl;

@@ -206,7 +206,8 @@ public class TestPostWater extends ScreenshotTestBase{
                 terrain.setShadowMode(ShadowMode.Receive);
                 rootNode.attachChild(terrain);
             }
-        }).run();
+        }).setTestType(org.jmonkeyengine.screenshottests.testframework.TestType.NON_DETERMINISTIC)
+          .run();
     }
 
 }

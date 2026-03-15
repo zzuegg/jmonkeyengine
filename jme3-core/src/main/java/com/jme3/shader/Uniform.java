@@ -71,6 +71,14 @@ public class Uniform extends ShaderVariable {
      */
     protected boolean setByCurrentMaterial = false;
 
+    /**
+     * Marks this uniform as a texture sampler uniform.
+     * When true and bindless textures are available, the renderer will
+     * use {@code glUniformHandleui64ARB} instead of {@code glUniform1i}
+     * to pass the texture handle directly instead of a texture unit index.
+     */
+    protected boolean textureSampler = false;
+
     @Override
     public int hashCode() {
         int hash = 5;
@@ -138,6 +146,26 @@ public class Uniform extends ShaderVariable {
 
     public void clearSetByCurrentMaterial(){
         setByCurrentMaterial = false;
+    }
+
+    /**
+     * Returns whether this uniform is a texture sampler.
+     *
+     * @return true if this uniform represents a texture sampler.
+     */
+    public boolean isTextureSampler() {
+        return textureSampler;
+    }
+
+    /**
+     * Marks this uniform as a texture sampler. When bindless textures are
+     * supported, the renderer uses this flag to determine whether to pass
+     * a bindless handle instead of a texture unit index.
+     *
+     * @param textureSampler true to mark as a texture sampler.
+     */
+    public void setTextureSampler(boolean textureSampler) {
+        this.textureSampler = textureSampler;
     }
 
     public void clearValue(){
@@ -445,6 +473,7 @@ public class Uniform extends ShaderVariable {
 
     public void reset(){
         setByCurrentMaterial = false;
+        textureSampler = false;
         location = -2;
         updateNeeded = true;
     }

@@ -118,6 +118,7 @@ public final class GLRenderer implements Renderer {
     private final TextureUtil texUtil;
     private boolean debug = false;
     private int debugGroupId = 0;
+    private boolean bindlessTextureEnabled = false;
 
 
     public GLRenderer(GL gl, GLExt glext, GLFbo glfbo) {
@@ -141,6 +142,37 @@ public final class GLRenderer implements Renderer {
 
     public void setDebugEnabled(boolean v) {
         debug = v;
+    }
+
+    /**
+     * Enables or disables the use of bindless textures.
+     * Bindless textures are an optional optimization that passes texture handles
+     * directly to shaders instead of binding textures to texture units.
+     * Requires {@link Caps#BindlessTexture} to be supported.
+     * Disabled by default.
+     *
+     * @param enabled true to enable bindless textures, false to use traditional binding.
+     */
+    @Override
+    public void setBindlessTextureEnabled(boolean enabled) {
+        if (enabled && !caps.contains(Caps.BindlessTexture)) {
+            logger.log(Level.WARNING, "Bindless textures requested but not supported by hardware, ignoring.");
+            return;
+        }
+        this.bindlessTextureEnabled = enabled;
+        if (enabled) {
+            logger.log(Level.INFO, "Bindless textures enabled");
+        }
+    }
+
+    /**
+     * Returns whether bindless textures are currently enabled.
+     *
+     * @return true if bindless textures are enabled.
+     */
+    @Override
+    public boolean isBindlessTextureEnabled() {
+        return bindlessTextureEnabled;
     }
 
     @Override
@@ -290,6 +322,17 @@ public final class GLRenderer implements Renderer {
             if (oglVer >= 450) {
                 caps.add(Caps.OpenGL45);
             }
+            if (oglVer >= 460) {
+                caps.add(Caps.OpenGL46);
+            }
+            // Multi-draw indirect: core in 4.3
+            if (oglVer >= 430) {
+                caps.add(Caps.MultiDrawIndirect);
+            }
+            // Multi-draw indirect count: core in 4.6
+            if (oglVer >= 460) {
+                caps.add(Caps.MultiDrawIndirectCount);
+            }
         }
 
         int glslVer = extractVersion(gl.glGetString(GL.GL_SHADING_LANGUAGE_VERSION));
@@ -301,6 +344,8 @@ public final class GLRenderer implements Renderer {
                 }
                 // so that future OpenGL revisions won't break jme3
                 // fall through intentional
+            case 460:
+                caps.add(Caps.GLSL460);
             case 450:
                 caps.add(Caps.GLSL450);
             case 440:
@@ -500,6 +545,11 @@ public final class GLRenderer implements Renderer {
             limits.put(Limits.TextureAnisotropy, getInteger(GLExt.GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT));
         }
 
+        if (hasExtension("GL_ARB_bindless_texture")) {
+            caps.add(Caps.BindlessTexture);
+            logger.log(Level.FINE, "Bindless texture support detected (GL_ARB_bindless_texture)");
+        }
+
         if (hasExtension("GL_EXT_framebuffer_object")
                 || caps.contains(Caps.OpenGL30)
                 || caps.contains(Caps.OpenGLES20)) {
@@ -588,8 +638,10 @@ public final class GLRenderer implements Renderer {
             caps.add(Caps.ShaderStorageBufferObject);
             limits.put(Limits.ShaderStorageBufferObjectMaxBlockSize,
                     getInteger(GL4.GL_MAX_SHADER_STORAGE_BLOCK_SIZE));
-            // Commented out until we support ComputeShaders and the ComputeShader Cap
-            // limits.put(Limits.ShaderStorageBufferObjectMaxComputeBlocks, getInteger(GL4.GL_MAX_COMPUTE_SHADER_STORAGE_BLOCKS));
+            if (caps.contains(Caps.OpenGL43)) {
+                caps.add(Caps.ComputeShader);
+                limits.put(Limits.ShaderStorageBufferObjectMaxComputeBlocks, getInteger(GL4.GL_MAX_COMPUTE_SHADER_STORAGE_BLOCKS));
+            }
             if (caps.contains(Caps.GeometryShader)) {
                 limits.put(Limits.ShaderStorageBufferObjectMaxGeometryBlocks,
                         getInteger(GL4.GL_MAX_GEOMETRY_SHADER_STORAGE_BLOCKS));
@@ -1435,6 +1487,14 @@ public final class GLRenderer implements Renderer {
                 break;
             case Int:
                 Integer i = (Integer) uniform.getValue();
+                if (bindlessTextureEnabled && uniform.isTextureSampler()) {
+                    int unit = i.intValue();
+                    long handle = context.bindlessHandles[unit];
+                    if (handle != 0) {
+                        glext.glUniformHandleui64ARB(loc, handle);
+                        break;
+                    }
+                }
                 gl.glUniform1i(loc, i.intValue());
                 break;
             default:
@@ -1516,7 +1576,12 @@ public final class GLRenderer implements Renderer {
         ListMap<String, Uniform> uniforms = shader.getUniformMap();
         for (int i = 0; i < uniforms.size(); i++) {
             Uniform uniform = uniforms.getValue(i);
-            if (uniform.isUpdateNeeded()) {
+            if (uniform.isUpdateNeeded()
+                    || (bindlessTextureEnabled && uniform.isTextureSampler())) {
+                // Bindless texture sampler uniforms must always be re-uploaded
+                // because the underlying handle may change (e.g. when sampling
+                // parameters are modified at runtime) even though the texture
+                // unit number stays the same.
                 updateUniform(shader, uniform);
             }
         }
@@ -1554,6 +1619,8 @@ public final class GLRenderer implements Renderer {
                 return GL4.GL_TESS_CONTROL_SHADER;
             case TessellationEvaluation:
                 return GL4.GL_TESS_EVALUATION_SHADER;
+            case Compute:
+                return GL4.GL_COMPUTE_SHADER;
             default:
                 throw new UnsupportedOperationException("Unrecognized shader type.");
         }
@@ -1617,13 +1684,64 @@ public final class GLRenderer implements Renderer {
 
         }
         
+        // Inject bindless extension and layout qualifier when bindless is
+        // enabled, unless the shader source already declares it.
+        boolean injectBindless = bindlessTextureEnabled
+                && caps.contains(Caps.BindlessTexture)
+                && !source.getSource().contains("GL_ARB_bindless_texture");
+        if (injectBindless) {
+            stringBuf.append("#extension GL_ARB_bindless_texture : require\n");
+        }
+
         if (linearizeSrgbImages) {
             stringBuf.append("#define SRGB 1\n");
         }
         stringBuf.append("#define ").append(source.getType().name().toUpperCase()).append("_SHADER 1\n");
 
         stringBuf.append(source.getDefines());
-        stringBuf.append(source.getSource());
+
+        if (injectBindless) {
+            // Insert layout qualifier after all #extension/#import/preprocessor
+            // directives in the shader source, since GLSL requires #extension
+            // directives to appear before any non-preprocessor statements.
+            String src = source.getSource();
+            int insertPos = 0;
+            int lineStart = 0;
+            while (lineStart < src.length()) {
+                // Skip whitespace at the start of the line
+                int idx = lineStart;
+                while (idx < src.length() && (src.charAt(idx) == ' ' || src.charAt(idx) == '\t')) {
+                    idx++;
+                }
+                if (idx < src.length() && src.charAt(idx) == '#') {
+                    // Preprocessor line — skip past it
+                    int eol = src.indexOf('\n', lineStart);
+                    if (eol == -1) {
+                        insertPos = src.length();
+                        break;
+                    }
+                    insertPos = eol + 1;
+                    lineStart = eol + 1;
+                } else if (idx < src.length() && (src.charAt(idx) == '\n' || src.charAt(idx) == '\r')) {
+                    // Empty line — skip
+                    int eol = src.indexOf('\n', lineStart);
+                    if (eol == -1) {
+                        insertPos = src.length();
+                        break;
+                    }
+                    lineStart = eol + 1;
+                } else {
+                    // First non-preprocessor, non-empty line
+                    insertPos = lineStart;
+                    break;
+                }
+            }
+            stringBuf.append(src, 0, insertPos);
+            stringBuf.append("layout(bindless_sampler) uniform;\n");
+            stringBuf.append(src, insertPos, src.length());
+        } else {
+            stringBuf.append(source.getSource());
+        }
 
 
         intBuf1.clear();
@@ -1678,6 +1796,17 @@ public final class GLRenderer implements Renderer {
 
             shader.setId(id);
             needRegister = true;
+        }
+
+        // Validate: compute cannot be mixed with other shader types
+        boolean hasCompute = false;
+        boolean hasOther = false;
+        for (ShaderSource src : shader.getSources()) {
+            if (src.getType() == ShaderType.Compute) hasCompute = true;
+            else hasOther = true;
+        }
+        if (hasCompute && hasOther) {
+            throw new RendererException("Compute shader cannot be combined with other shader types in one program");
         }
 
         // If using GLSL 1.5, we bind the outputs for the user
@@ -2751,12 +2880,144 @@ public final class GLRenderer implements Renderer {
         int texId = image.getId();
         assert texId != -1;
 
-        setupTextureParams(unit, tex);
+        if (bindlessTextureEnabled) {
+            // For bindless textures, use sampler objects instead of
+            // glTexParameteri (which is GL_INVALID_OPERATION on a texture
+            // referenced by a handle per the ARB_bindless_texture spec).
+            updateBindlessHandle(unit, tex, image);
+        } else {
+            setupTextureParams(unit, tex);
+            context.bindlessHandles[unit] = 0;
+        }
+
         if (debug && caps.contains(Caps.GLDebug)) {
             if (tex.getName() != null) glext.glObjectLabel(GL.GL_TEXTURE, tex.getImage().getId(), tex.getName());
         }
     }
-    
+
+    /**
+     * Computes a packed key representing all sampler parameters that affect
+     * the bindless handle for a texture.  Two textures sharing the same
+     * {@link Image} but with different sampler parameters will produce
+     * different keys, and thus different bindless handles.
+     */
+    private long computeSamplerKey(Texture tex) {
+        long key = 0;
+        key |= (long) tex.getMagFilter().ordinal();
+        key |= (long) tex.getMinFilter().ordinal() << 4;
+        key |= (long) tex.getWrap(Texture.WrapAxis.S).ordinal() << 8;
+        key |= (long) tex.getWrap(Texture.WrapAxis.T).ordinal() << 12;
+        if (tex.getType() == Texture.Type.ThreeDimensional || tex.getType() == Texture.Type.CubeMap) {
+            key |= (long) tex.getWrap(Texture.WrapAxis.R).ordinal() << 16;
+        }
+        int aniso = tex.getAnisotropicFilter() == 0
+                ? defaultAnisotropicFilter : tex.getAnisotropicFilter();
+        key |= (long) (aniso & 0xFF) << 20;
+        key |= (long) tex.getShadowCompareMode().ordinal() << 28;
+        return key;
+    }
+
+    /**
+     * Creates or retrieves the bindless handle for the given texture's
+     * sampler state.  Each distinct sampler configuration on the same
+     * {@link Image} gets its own handle entry, so multiple {@link Texture}
+     * objects sharing an Image with different sampler parameters work correctly.
+     * <p>
+     * When a texture's sampler parameters change at runtime, a new entry is
+     * created for the new sampler key. Old entries remain resident and are
+     * reused if the sampler state switches back. They are cleaned up when
+     * the Image is deleted via {@link #deleteImage(Image)}.
+     */
+    private void updateBindlessHandle(int unit, Texture tex, Image image) {
+        long samplerKey = computeSamplerKey(tex);
+        Image.BindlessHandleEntry entry = image.getBindlessEntry(samplerKey);
+
+        if (entry != null && entry.handle != 0) {
+            // Existing handle for this sampler configuration — reuse it.
+            context.bindlessHandles[unit] = entry.handle;
+            return;
+        }
+
+        if (entry == null) {
+            entry = image.getOrCreateBindlessEntry(samplerKey);
+        }
+
+        // First time for this sampler state on this image.
+        // If no other handles exist yet, we can set up texture params
+        // directly on the GL texture and use the simple handle path.
+        if (image.getBindlessEntries().size() == 1 && entry.handle == 0) {
+            setupTextureParams(unit, tex);
+            long handle = glext.glGetTextureHandleARB(image.getId());
+            entry.handle = handle;
+            glext.glMakeTextureHandleResidentARB(handle);
+            entry.resident = true;
+            context.bindlessHandles[unit] = handle;
+            return;
+        }
+
+        // Additional sampler state (or re-creation): use a GL sampler object
+        // to obtain a texture+sampler handle.
+        int newSamplerId = createBindlessSampler(tex);
+        entry.samplerId = newSamplerId;
+
+        long handle = glext.glGetTextureSamplerHandleARB(image.getId(), newSamplerId);
+        entry.handle = handle;
+        glext.glMakeTextureHandleResidentARB(handle);
+        entry.resident = true;
+        context.bindlessHandles[unit] = handle;
+    }
+
+    /**
+     * Creates a GL sampler object configured with the sampling parameters
+     * from the given {@link Texture}.
+     */
+    private int createBindlessSampler(Texture tex) {
+        int sampler = glext.glGenSamplers();
+
+        boolean haveMips = true;
+        Image image = tex.getImage();
+        if (image != null) {
+            haveMips = image.isGeneratedMipmapsRequired() || image.hasMipmaps();
+        }
+
+        glext.glSamplerParameteri(sampler, GL.GL_TEXTURE_MAG_FILTER,
+                convertMagFilter(tex.getMagFilter()));
+        glext.glSamplerParameteri(sampler, GL.GL_TEXTURE_MIN_FILTER,
+                convertMinFilter(tex.getMinFilter(), haveMips));
+        int wrapS = convertWrapMode(tex.getWrap(Texture.WrapAxis.S));
+        int wrapT = convertWrapMode(tex.getWrap(Texture.WrapAxis.T));
+        glext.glSamplerParameteri(sampler, GL.GL_TEXTURE_WRAP_S, wrapS);
+        glext.glSamplerParameteri(sampler, GL.GL_TEXTURE_WRAP_T, wrapT);
+
+        if (tex.getType() == Texture.Type.ThreeDimensional
+                || tex.getType() == Texture.Type.CubeMap) {
+            glext.glSamplerParameteri(sampler, GL2.GL_TEXTURE_WRAP_R,
+                    convertWrapMode(tex.getWrap(Texture.WrapAxis.R)));
+        }
+
+        int desiredAniso = tex.getAnisotropicFilter() == 0
+                ? defaultAnisotropicFilter : tex.getAnisotropicFilter();
+        if (caps.contains(Caps.TextureFilterAnisotropic) && desiredAniso > 0) {
+            glext.glSamplerParameterf(sampler,
+                    GLExt.GL_TEXTURE_MAX_ANISOTROPY_EXT, desiredAniso);
+        }
+
+        Texture.ShadowCompareMode compareMode = tex.getShadowCompareMode();
+        if (compareMode != Texture.ShadowCompareMode.Off) {
+            glext.glSamplerParameteri(sampler,
+                    GL2.GL_TEXTURE_COMPARE_MODE, GL2.GL_COMPARE_REF_TO_TEXTURE);
+            if (compareMode == Texture.ShadowCompareMode.GreaterOrEqual) {
+                glext.glSamplerParameteri(sampler,
+                        GL2.GL_TEXTURE_COMPARE_FUNC, GL.GL_GEQUAL);
+            } else {
+                glext.glSamplerParameteri(sampler,
+                        GL2.GL_TEXTURE_COMPARE_FUNC, GL.GL_LEQUAL);
+            }
+        }
+
+        return sampler;
+    }
+
     @Override
     public void setTextureImage(int unit, TextureImage tex) throws TextureUnitException {
         if (unit < 0 || unit >= RenderContext.maxTextureUnits) {
@@ -2860,6 +3121,20 @@ public final class GLRenderer implements Renderer {
     public void deleteImage(Image image) {
         int texId = image.getId();
         if (texId != -1) {
+            // Make all bindless handles non-resident and delete sampler objects
+            ArrayList<Image.BindlessHandleEntry> entries = image.getBindlessEntries();
+            if (entries != null) {
+                for (int i = 0; i < entries.size(); i++) {
+                    Image.BindlessHandleEntry entry = entries.get(i);
+                    if (entry.resident) {
+                        glext.glMakeTextureHandleNonResidentARB(entry.handle);
+                    }
+                    if (entry.samplerId != 0) {
+                        glext.glDeleteSamplers(entry.samplerId);
+                    }
+                }
+            }
+
             intBuf1.put(0, texId);
             intBuf1.position(0).limit(1);
             gl.glDeleteTextures(intBuf1);
@@ -3066,6 +3341,168 @@ public final class GLRenderer implements Renderer {
             }
         }
         bo.clearUpdateNeeded();
+    }
+
+    /**
+     * Maps a BufferObject's BufferType to the corresponding GL target constant.
+     */
+    private void bindDrawIndirectBuffer(BufferObject bo) {
+        int target = GL4.GL_DRAW_INDIRECT_BUFFER;
+        if (bo.isUpdateNeeded()) {
+            updateBufferData(target, bo);
+            context.boundDrawIndirectBuffer = 0; // updateBufferData unbinds
+        }
+        int bufferId = bo.getId();
+        if (context.boundDrawIndirectBuffer != bufferId) {
+            gl.glBindBuffer(target, bufferId);
+            context.boundDrawIndirectBuffer = bufferId;
+        }
+    }
+
+    private void bindParameterBuffer(BufferObject bo) {
+        int target = GL4.GL_PARAMETER_BUFFER;
+        if (bo.isUpdateNeeded()) {
+            updateBufferData(target, bo);
+            context.boundParameterBuffer = 0; // updateBufferData unbinds
+        }
+        int bufferId = bo.getId();
+        if (context.boundParameterBuffer != bufferId) {
+            gl.glBindBuffer(target, bufferId);
+            context.boundParameterBuffer = bufferId;
+        }
+    }
+
+    /**
+     * Sets up vertex attributes from a mesh for indirect drawing.
+     * Does NOT call clearVertexAttribs() — callers must call it after the draw call.
+     */
+    private void setupMeshVertexAttribs(Mesh mesh) {
+        VertexBuffer interleavedData = mesh.getBuffer(VertexBuffer.Type.InterleavedData);
+        if (interleavedData != null && interleavedData.isUpdateNeeded()) {
+            updateBufferData(interleavedData);
+        }
+
+        for (VertexBuffer vb : mesh.getBufferList().getArray()) {
+            if (vb.getBufferType() == VertexBuffer.Type.InterleavedData
+                    || vb.getUsage() == VertexBuffer.Usage.CpuOnly
+                    || vb.getBufferType() == VertexBuffer.Type.Index) {
+                continue;
+            }
+
+            if (vb.getStride() == 0) {
+                setVertexAttrib(vb);
+            } else {
+                setVertexAttrib(vb, interleavedData);
+            }
+        }
+    }
+
+    /**
+     * Binds the index buffer from the mesh if present.
+     * Returns the GL format type for the index buffer, or -1 if no index buffer.
+     */
+    private int bindMeshIndexBuffer(Mesh mesh) {
+        VertexBuffer indices = mesh.getBuffer(VertexBuffer.Type.Index);
+        if (indices == null) {
+            return -1;
+        }
+
+        if (indices.isUpdateNeeded()) {
+            updateBufferData(indices);
+        }
+
+        int bufId = indices.getId();
+        if (context.boundElementArrayVBO != bufId) {
+            gl.glBindBuffer(GL.GL_ELEMENT_ARRAY_BUFFER, bufId);
+            context.boundElementArrayVBO = bufId;
+        }
+
+        return convertFormat(indices.getFormat());
+    }
+
+    @Override
+    public void renderMeshIndirect(Mesh mesh, BufferObject commandBuffer, long byteOffset) {
+        if (mesh == null) throw new IllegalArgumentException("mesh must not be null");
+        if (commandBuffer == null) throw new IllegalArgumentException("commandBuffer must not be null");
+        if (!caps.contains(Caps.MultiDrawIndirect)) {
+            throw new RendererException("Multi-draw indirect not supported by the video hardware");
+        }
+
+        setupMeshVertexAttribs(mesh);
+        bindDrawIndirectBuffer(commandBuffer);
+
+        int mode = convertElementMode(mesh.getMode());
+        int indexFormat = bindMeshIndexBuffer(mesh);
+
+        if (indexFormat != -1) {
+            gl4.glDrawElementsIndirect(mode, indexFormat, byteOffset);
+        } else {
+            gl4.glDrawArraysIndirect(mode, byteOffset);
+        }
+
+        statistics.onMeshDrawn(mesh, 0);
+        clearVertexAttribs();
+    }
+
+    @Override
+    public void renderMeshMultiIndirect(Mesh mesh, BufferObject commandBuffer, int drawCount, long byteOffset) {
+        if (mesh == null) throw new IllegalArgumentException("mesh must not be null");
+        if (commandBuffer == null) throw new IllegalArgumentException("commandBuffer must not be null");
+        if (drawCount < 0) throw new IllegalArgumentException("drawCount must not be negative");
+        if (!caps.contains(Caps.MultiDrawIndirect)) {
+            throw new RendererException("Multi-draw indirect not supported by the video hardware");
+        }
+        if (drawCount == 0) return;
+
+        setupMeshVertexAttribs(mesh);
+        bindDrawIndirectBuffer(commandBuffer);
+
+        int mode = convertElementMode(mesh.getMode());
+        int indexFormat = bindMeshIndexBuffer(mesh);
+
+        if (indexFormat != -1) {
+            gl4.glMultiDrawElementsIndirect(mode, indexFormat, byteOffset, drawCount, 0);
+        } else {
+            gl4.glMultiDrawArraysIndirect(mode, byteOffset, drawCount, 0);
+        }
+
+        // Note: we pass count=1 because the per-draw triangle counts are
+        // defined in the indirect command buffer, not derivable from the mesh.
+        statistics.onMeshDrawn(mesh, 0);
+        clearVertexAttribs();
+    }
+
+    @Override
+    public void renderMeshMultiIndirectCount(Mesh mesh, BufferObject commandBuffer,
+            BufferObject countBuffer, int maxDrawCount, long byteOffset) {
+        if (mesh == null) throw new IllegalArgumentException("mesh must not be null");
+        if (commandBuffer == null) throw new IllegalArgumentException("commandBuffer must not be null");
+        if (countBuffer == null) throw new IllegalArgumentException("countBuffer must not be null");
+        if (maxDrawCount < 0) throw new IllegalArgumentException("maxDrawCount must not be negative");
+        if (!caps.contains(Caps.MultiDrawIndirectCount)) {
+            throw new RendererException("Multi-draw indirect count not supported by the video hardware");
+        }
+
+        setupMeshVertexAttribs(mesh);
+        bindDrawIndirectBuffer(commandBuffer);
+        bindParameterBuffer(countBuffer);
+
+        // GPU-driven path: the count buffer and command buffer may have been
+        // written by a compute shader, so issue a memory barrier.
+        gl4.glMemoryBarrier(GL4.GL_COMMAND_BARRIER_BIT);
+
+        int mode = convertElementMode(mesh.getMode());
+        int indexFormat = bindMeshIndexBuffer(mesh);
+
+        if (indexFormat != -1) {
+            gl4.glMultiDrawElementsIndirectCount(mode, indexFormat, byteOffset, 0, maxDrawCount, 0);
+        } else {
+            gl4.glMultiDrawArraysIndirectCount(mode, byteOffset, 0, maxDrawCount, 0);
+        }
+
+        // Actual draw count is GPU-determined; use 1 to avoid misleading stats.
+        statistics.onMeshDrawn(mesh, 0);
+        clearVertexAttribs();
     }
 
     @Override
@@ -3615,5 +4052,38 @@ public final class GLRenderer implements Renderer {
     @Override
     public void registerNativeObject(NativeObject nativeObject) {
         objManager.registerObject(nativeObject);
+    }
+
+    @Override
+    public void dispatchCompute(int numGroupsX, int numGroupsY, int numGroupsZ) {
+        if (gl4 == null) {
+            throw new RendererException("Compute shaders require OpenGL 4.3+");
+        }
+        if (numGroupsX < 1 || numGroupsY < 1 || numGroupsZ < 1) {
+            throw new IllegalArgumentException(
+                "Work group counts must be >= 1, got: " + numGroupsX + ", " + numGroupsY + ", " + numGroupsZ);
+        }
+        gl4.glDispatchCompute(numGroupsX, numGroupsY, numGroupsZ);
+    }
+
+    @Override
+    public void memoryBarrier(int barrierBits) {
+        if (gl4 == null) {
+            throw new RendererException("Memory barriers require OpenGL 4.2+");
+        }
+        gl4.glMemoryBarrier(barrierBits);
+    }
+
+    @Override
+    public void bindImageTexture(int unit, Texture tex, int level,
+                                  boolean layered, int layer, int access, int format) {
+        if (gl4 == null) {
+            throw new RendererException("Image binding requires OpenGL 4.2+");
+        }
+        Image image = tex.getImage();
+        if (image.getId() == -1) {
+            updateTexImageData(image, tex.getType(), 0, false);
+        }
+        gl4.glBindImageTexture(unit, image.getId(), level, layered, layer, access, format);
     }
 }

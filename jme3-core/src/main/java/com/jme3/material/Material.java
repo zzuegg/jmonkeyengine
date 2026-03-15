@@ -907,6 +907,7 @@ public class Material implements CloneableSmartAsset, Cloneable, Savable {
                     throw new IllegalStateException(message);
                 }
                 uniform.setValue(VarType.Int, unit.textureUnit);
+                uniform.setTextureSampler(true);
                 unit.textureUnit++;
             } else {
                 uniform.setValue(type, param.getValue());
@@ -1085,16 +1086,62 @@ public class Material implements CloneableSmartAsset, Cloneable, Savable {
      * @param renderManager The render manager requesting the rendering
      */
     public void render(Geometry geometry, LightList lights, RenderManager renderManager) {
+        Shader shader = applyStateInternal(geometry, lights, renderManager);
+        if (shader == null) {
+            return; // noRender technique
+        }
+
+        // Delegate rendering to the technique
+        technique.render(renderManager, shader, geometry, lights,
+                lastApplyStateBindUnits);
+    }
+
+    /**
+     * Applies all material state (technique selection, shader compilation,
+     * render state, uniform bindings, material parameters) without issuing
+     * a draw call. After this call, the GPU is ready for a custom draw
+     * command such as {@link Renderer#renderMeshMultiIndirect}.
+     * <p>
+     * Lights are obtained from the geometry's scene graph. If light filtering
+     * is needed, use {@link RenderManager#renderGeometryIndirect} which
+     * handles filtering before calling this method.
+     *
+     * @param geometry The geometry providing lights, world overrides, and render context
+     * @param renderManager The render manager
+     */
+    public void applyState(Geometry geometry, RenderManager renderManager) {
+        applyStateInternal(geometry, geometry.getWorldLightList(), renderManager);
+    }
+
+    /**
+     * Applies material state with an explicit light list.
+     * Use this when lights have been pre-filtered (e.g. by
+     * {@link RenderManager#renderGeometryIndirect}).
+     *
+     * @param geometry The geometry providing world overrides and render context
+     * @param lights The pre-filtered light list
+     * @param renderManager The render manager
+     */
+    public void applyState(Geometry geometry, LightList lights, RenderManager renderManager) {
+        applyStateInternal(geometry, lights, renderManager);
+    }
+
+    /**
+     * Internal state application used by both {@link #render} and {@link #applyState}.
+     * Takes an explicit light list so {@code render()} can pass the pre-filtered list
+     * from {@link RenderManager#renderGeometry}.
+     */
+    private Shader applyStateInternal(Geometry geometry, LightList lights, RenderManager renderManager) {
         if (technique == null) {
             selectTechnique(TechniqueDef.DEFAULT_TECHNIQUE_NAME, renderManager);
         }
-        
+
         TechniqueDef techniqueDef = technique.getDef();
         Renderer renderer = renderManager.getRenderer();
         EnumSet<Caps> rendererCaps = renderer.getCaps();
-        
+
         if (techniqueDef.isNoRender()) {
-            return;
+            return null;
         }
 
         // Apply render state
@@ -1105,22 +1152,29 @@ public class Material implements CloneableSmartAsset, Cloneable, Savable {
 
         // Select shader to use
         Shader shader = technique.makeCurrent(renderManager, overrides, renderManager.getForcedMatParams(), lights, rendererCaps);
-        
+
         // Begin tracking which uniforms were changed by material.
         clearUniformsSetByCurrent(shader);
-        
+
         // Set uniform bindings
         renderManager.updateUniformBindings(shader);
-        
+
         // Set material parameters
-        BindUnits units = updateShaderMaterialParameters(renderer, shader, overrides, renderManager.getForcedMatParams());
+        lastApplyStateBindUnits = updateShaderMaterialParameters(renderer, shader, overrides, renderManager.getForcedMatParams());
 
         // Clear any uniforms not changed by material.
         resetUniformsNotSetByCurrent(shader);
-        
-        // Delegate rendering to the technique
-        technique.render(renderManager, shader, geometry, lights, units);
+
+        // Bind the shader program. For regular rendering this is also done
+        // inside TechniqueDefLogic.render(), but for indirect/compute dispatch
+        // the caller bypasses TechniqueDefLogic so we must bind here.
+        renderer.setShader(shader);
+
+        return shader;
     }
+
+    // Cached between applyState() and render() to avoid recomputing
+    private BindUnits lastApplyStateBindUnits;
 
     /**
      * Called by {@link RenderManager} to render the geometry by
@@ -1134,6 +1188,53 @@ public class Material implements CloneableSmartAsset, Cloneable, Savable {
      */
     public void render(Geometry geom, RenderManager rm) {
         render(geom, geom.getWorldLightList(), rm);
+    }
+
+    /**
+     * Selects the named compute technique and dispatches it with the given work group counts.
+     * <p>
+     * Material parameters are bound the same way as for rendering techniques.
+     * Memory barriers are NOT issued automatically — call
+     * {@link Renderer#memoryBarrier(int)} after dispatch if needed.
+     *
+     * @param techniqueName the name of the compute technique to use
+     * @param renderManager the RenderManager
+     * @param numGroupsX work groups in X
+     * @param numGroupsY work groups in Y
+     * @param numGroupsZ work groups in Z
+     */
+    public void dispatch(String techniqueName, RenderManager renderManager,
+                         int numGroupsX, int numGroupsY, int numGroupsZ) {
+        selectTechnique(techniqueName, renderManager);
+
+        TechniqueDef techniqueDef = technique.getDef();
+        if (!techniqueDef.isComputeOnly()) {
+            throw new IllegalStateException(
+                "Technique '" + techniqueName + "' is not a compute technique. "
+                + "Use Material.render() for rendering techniques.");
+        }
+
+        Renderer renderer = renderManager.getRenderer();
+        EnumSet<Caps> rendererCaps = renderer.getCaps();
+
+        // Get/compile shader with current defines.
+        // No world overrides — compute dispatch is not associated with scene graph
+        // geometry, so MatParamOverride from the scene graph does not apply.
+        Shader shader = technique.makeCurrent(
+            renderManager, null, renderManager.getForcedMatParams(), null, rendererCaps);
+
+        // Bind world uniforms
+        clearUniformsSetByCurrent(shader);
+        renderManager.updateUniformBindings(shader);
+
+        // Set material parameters
+        updateShaderMaterialParameters(renderer, shader, null, renderManager.getForcedMatParams());
+
+        // Reset untracked uniforms
+        resetUniformsNotSetByCurrent(shader);
+
+        // Dispatch
+        technique.dispatch(renderManager, shader, numGroupsX, numGroupsY, numGroupsZ);
     }
 
     @Override

@@ -1,0 +1,26 @@
+MaterialDef TestCompute {
+
+    MaterialParameters {
+        Int Width
+        Int Height
+        Float Time
+    }
+
+    Technique FillPattern {
+        ComputeShader GLSL430 : Common/MatDefs/Compute/FillPattern.comp
+
+        Defines {
+            WIDTH : Width
+            HEIGHT : Height
+        }
+    }
+
+    Technique FillGradient {
+        ComputeShader GLSL430 : Common/MatDefs/Compute/FillGradient.comp
+
+        Defines {
+            WIDTH : Width
+            HEIGHT : Height
+        }
+    }
+}

@@ -554,10 +554,119 @@ public interface Renderer {
     public void setShaderStorageBufferObject(int bindingPoint, BufferObject bufferObject) ;
     public void setUniformBufferObject(int bindingPoint, BufferObject bufferObject) ;
 
+    /**
+     * Render using a single indirect draw command from the command buffer.
+     * Whether indexed or non-indexed drawing is used is determined by whether
+     * the mesh has an index buffer.
+     *
+     * @param mesh          the mesh defining vertex format and buffers
+     * @param commandBuffer the indirect command buffer (BufferType.DrawIndirectBuffer)
+     * @param byteOffset    byte offset into the command buffer (not a command index)
+     */
+    default void renderMeshIndirect(Mesh mesh, BufferObject commandBuffer, long byteOffset) {
+        throw new UnsupportedOperationException("Indirect rendering not supported by this renderer");
+    }
+
+    /**
+     * Render using multiple indirect draw commands from the command buffer.
+     * Whether indexed or non-indexed drawing is used is determined by whether
+     * the mesh has an index buffer.
+     *
+     * @param mesh          the mesh defining vertex format and buffers
+     * @param commandBuffer the indirect command buffer (BufferType.DrawIndirectBuffer)
+     * @param drawCount     number of draw commands to execute
+     * @param byteOffset    byte offset into the command buffer (not a command index)
+     */
+    default void renderMeshMultiIndirect(Mesh mesh, BufferObject commandBuffer, int drawCount, long byteOffset) {
+        throw new UnsupportedOperationException("Indirect rendering not supported by this renderer");
+    }
+
+    /**
+     * Render using multiple indirect draw commands with GPU-determined count.
+     * The actual draw count is read from countBuffer at offset 0. Whether indexed
+     * or non-indexed drawing is used is determined by whether the mesh has an index buffer.
+     *
+     * @param mesh          the mesh defining vertex format and buffers
+     * @param commandBuffer the indirect command buffer (BufferType.DrawIndirectBuffer)
+     * @param countBuffer   buffer containing the draw count (BufferType.ParameterBuffer)
+     * @param maxDrawCount  upper bound on the draw count
+     * @param byteOffset    byte offset into the command buffer (not a command index)
+     */
+    default void renderMeshMultiIndirectCount(Mesh mesh, BufferObject commandBuffer,
+            BufferObject countBuffer, int maxDrawCount, long byteOffset) {
+        throw new UnsupportedOperationException("Indirect rendering with count not supported by this renderer");
+    }
+
     public void deleteFence(GLFence fence);
 
     /**
      * Registers a NativeObject to be cleaned up by this renderer.
      */
     public void registerNativeObject(NativeObject nativeObject);
+
+    /**
+     * Enables or disables the use of bindless textures.
+     * When enabled and supported ({@link Caps#BindlessTexture}), texture handles
+     * are passed directly to shaders instead of binding textures to texture units.
+     * This reduces CPU overhead from state changes and removes the texture unit limit.
+     *
+     * <p>Disabled by default. Has no effect if the hardware does not support
+     * {@code GL_ARB_bindless_texture}.
+     *
+     * @param enabled true to enable bindless textures, false to use traditional binding.
+     */
+    public default void setBindlessTextureEnabled(boolean enabled) {
+    }
+
+    /**
+     * Returns whether bindless textures are currently enabled.
+     *
+     * @return true if bindless textures are enabled.
+     */
+    public default boolean isBindlessTextureEnabled() {
+        return false;
+    }
+
+    /**
+     * Dispatches the currently bound compute shader with the given work group counts.
+     * Requires {@link Caps#ComputeShader}.
+     *
+     * @param numGroupsX number of work groups in X
+     * @param numGroupsY number of work groups in Y
+     * @param numGroupsZ number of work groups in Z
+     */
+    default void dispatchCompute(int numGroupsX, int numGroupsY, int numGroupsZ) {
+        throw new UnsupportedOperationException("Compute shaders not supported by this renderer");
+    }
+
+    /**
+     * Issues a memory barrier ordering memory transactions.
+     * Call after compute dispatch to ensure writes are visible to subsequent operations.
+     *
+     * @param barrierBits bitfield of barrier types (e.g. GL_SHADER_STORAGE_BARRIER_BIT)
+     */
+    default void memoryBarrier(int barrierBits) {
+        throw new UnsupportedOperationException("Memory barriers not supported by this renderer");
+    }
+
+    /**
+     * Binds a texture level for image load/store access from a compute shader.
+     * <p>
+     * The texture must already be uploaded to the GPU. Call
+     * {@link #setTexture(int, Texture)} first to ensure upload. Note that
+     * if the texture has not been uploaded, this method will upload it
+     * internally, which may clobber the texture currently bound to unit 0.
+     *
+     * @param unit image unit index
+     * @param tex the Texture to bind
+     * @param level mipmap level
+     * @param layered if true, bind all layers; if false, bind single layer
+     * @param layer layer index (ignored if layered is true)
+     * @param access GL access mode (e.g. {@code GL4.GL_WRITE_ONLY})
+     * @param format internal format (e.g. {@code GL4.GL_RGBA8})
+     */
+    default void bindImageTexture(int unit, Texture tex, int level,
+                                   boolean layered, int layer, int access, int format) {
+        throw new UnsupportedOperationException("Image binding not supported by this renderer");
+    }
 }

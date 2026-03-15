@@ -613,6 +613,30 @@ public class Image extends NativeObject implements Savable /*, Cloneable*/ {
     protected boolean needGeneratedMips = false;
     protected LastTextureState lastTextureState = new LastTextureState();
 
+    // Bindless texture state (ARB_bindless_texture).
+    // Multiple entries are needed when different Textures share this Image
+    // but use different sampler parameters — each combination produces a
+    // distinct bindless handle.
+    protected ArrayList<BindlessHandleEntry> bindlessEntries = null;
+
+    /**
+     * Holds a single bindless handle and its associated GL sampler object,
+     * keyed by a packed representation of the sampler state that produced it.
+     * <p>
+     * <b>Internal use by the renderer only.</b> Do not modify fields directly
+     * from application code — doing so may cause GPU resource leaks or crashes.
+     */
+    public static class BindlessHandleEntry {
+        public final long samplerKey;
+        public long handle;
+        public int samplerId;
+        public boolean resident;
+
+        public BindlessHandleEntry(long samplerKey) {
+            this.samplerKey = samplerKey;
+        }
+    }
+
     /**
      * Internal use only.
      * The renderer stores the texture state set from the last texture,
@@ -688,11 +712,75 @@ public class Image extends NativeObject implements Savable /*, Cloneable*/ {
                 && (!FastMath.isPowerOfTwo(width) || !FastMath.isPowerOfTwo(height));
     }
     
+    /**
+     * Returns the bindless texture handle for the first (or only) sampler
+     * state registered on this image. Convenience for the common case where
+     * only one Texture uses this Image.
+     *
+     * @return the 64-bit bindless texture handle, or 0 if none.
+     */
+    public long getBindlessHandle() {
+        if (bindlessEntries == null || bindlessEntries.isEmpty()) {
+            return 0;
+        }
+        return bindlessEntries.get(0).handle;
+    }
+
+    /**
+     * Returns the bindless handle entry for the given sampler key, or null
+     * if no entry exists for that key.
+     * Internal use by the renderer only.
+     *
+     * @param samplerKey the packed sampler state key
+     * @return the entry, or null
+     */
+    public BindlessHandleEntry getBindlessEntry(long samplerKey) {
+        if (bindlessEntries == null) return null;
+        for (int i = 0; i < bindlessEntries.size(); i++) {
+            if (bindlessEntries.get(i).samplerKey == samplerKey) {
+                return bindlessEntries.get(i);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns or creates a bindless handle entry for the given sampler key.
+     * Internal use by the renderer only.
+     *
+     * @param samplerKey the packed sampler state key
+     * @return the existing or new entry
+     */
+    public BindlessHandleEntry getOrCreateBindlessEntry(long samplerKey) {
+        BindlessHandleEntry entry = getBindlessEntry(samplerKey);
+        if (entry == null) {
+            entry = new BindlessHandleEntry(samplerKey);
+            if (bindlessEntries == null) {
+                bindlessEntries = new ArrayList<>(1);
+            }
+            bindlessEntries.add(entry);
+        }
+        return entry;
+    }
+
+    /**
+     * Returns all bindless handle entries, or null if none exist.
+     * Internal use by the renderer for cleanup.
+     *
+     * @return the list of entries, or null
+     */
+    public ArrayList<BindlessHandleEntry> getBindlessEntries() {
+        return bindlessEntries;
+    }
+
     @Override
     public void resetObject() {
         this.id = -1;
         this.mipsWereGenerated = false;
         this.lastTextureState.reset();
+        if (this.bindlessEntries != null) {
+            this.bindlessEntries.clear();
+        }
         setUpdateNeeded();
     }
 
@@ -727,6 +815,7 @@ public class Image extends NativeObject implements Savable /*, Cloneable*/ {
         clone.mipMapSizes = mipMapSizes != null ? mipMapSizes.clone() : null;
         clone.data = data != null ? new ArrayList<ByteBuffer>(data) : null;
         clone.lastTextureState = new LastTextureState();
+        clone.bindlessEntries = null;
         clone.setUpdateNeeded();
         return clone;
     }
