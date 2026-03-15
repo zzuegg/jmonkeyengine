@@ -628,6 +628,19 @@ public interface Renderer {
     }
 
     /**
+     * Uploads a texture to the GPU without affecting rendering state.
+     * <p>
+     * Use this to pre-load textures during initialization or loading screens
+     * so they are ready when first rendered. If the texture is already uploaded,
+     * this is a no-op.
+     *
+     * @param tex the texture to upload
+     */
+    default void preloadTexture(Texture tex) {
+        throw new UnsupportedOperationException("Texture preloading not supported by this renderer");
+    }
+
+    /**
      * Queries GPU memory information at runtime.
      * <p>
      * Automatically uses the best available extension:

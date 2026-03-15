@@ -35,6 +35,7 @@ import com.jme3.app.SimpleApplication;
 import com.jme3.app.state.AppState;
 import com.jme3.app.state.VideoRecorderAppState;
 import com.jme3.math.ColorRGBA;
+import com.jme3.system.AppSettings;
 
 import java.util.function.Consumer;
 
@@ -61,4 +62,11 @@ public class App extends SimpleApplication {
         super.handleError(errMsg, t);
         onError.accept(t);
     }
+
+    public void setOnError(Consumer<Throwable> onError) {
+        this.onError = onError;
+        AppSettings appSettings=new AppSettings(true);
+
+    }
+
 }

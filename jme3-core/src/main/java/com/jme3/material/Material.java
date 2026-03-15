@@ -757,6 +757,43 @@ public class Material implements CloneableSmartAsset, Cloneable, Savable {
     }
 
     /**
+     * Pass a texture image for image load/store access in a compute shader.
+     * <p>
+     * The material parameter must be declared as {@code Image2D} in the
+     * material definition (.j3md). The texture will be bound via
+     * {@code glBindImageTexture} during dispatch.
+     *
+     * @param name the name of the image parameter defined in the material definition (j3md)
+     * @param value the TextureImage wrapping the texture with access/level/layer info
+     */
+    public void setImage(String name, TextureImage value) {
+        if (value == null) {
+            clearParam(name);
+            return;
+        }
+        setParam(name, VarType.Image2D, value);
+    }
+
+    /**
+     * Pass a texture for image load/store access in a compute shader.
+     * <p>
+     * Convenience overload that creates a {@link TextureImage} with the
+     * specified access mode. The material parameter must be declared as
+     * {@code Image2D} in the material definition (.j3md).
+     *
+     * @param name the name of the image parameter defined in the material definition (j3md)
+     * @param texture the texture to bind as an image
+     * @param access the shader access mode (ReadOnly, WriteOnly, or ReadWrite)
+     */
+    public void setImage(String name, Texture texture, TextureImage.Access access) {
+        if (texture == null) {
+            clearParam(name);
+            return;
+        }
+        setParam(name, VarType.Image2D, new TextureImage(texture, access));
+    }
+
+    /**
      * Pass a Vector2f to the material shader.
      *
      * @param name the name of the Vector2f defined in the material definition (j3md)

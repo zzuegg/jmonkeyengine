@@ -2926,6 +2926,52 @@ public final class GLRenderer implements Renderer {
         }
     }
 
+    @Override
+    public void preloadTexture(Texture tex) {
+        Image image = tex.getImage();
+        boolean needsUpload = image.isUpdateNeeded()
+                || (image.isGeneratedMipmapsRequired() && !image.isMipmapsGenerated());
+        boolean needsBindlessHandle = bindlessTextureEnabled
+                && image.getBindlessEntry(computeSamplerKey(tex)) == null;
+
+        if (!needsUpload && !needsBindlessHandle) {
+            return; // already uploaded and handle exists
+        }
+
+        // Save state on unit 0 so we can restore it
+        WeakReference<Image> prevRef = context.boundTextures[0];
+        Image prevImage = prevRef != null ? prevRef.get() : null;
+        int prevTexId = prevImage != null ? prevImage.getId() : 0;
+        long prevBindlessHandle = context.bindlessHandles[0];
+
+        // Upload the texture via unit 0
+        if (needsUpload) {
+            boolean scaleToPot = false;
+            try {
+                checkNonPowerOfTwo(tex);
+            } catch (RendererException ex) {
+                scaleToPot = true;
+            }
+            updateTexImageData(image, tex.getType(), 0, scaleToPot);
+        }
+
+        // Create bindless handle if enabled
+        if (bindlessTextureEnabled) {
+            updateBindlessHandle(0, tex, image);
+        }
+
+        // Restore previous state on unit 0
+        int target = convertTextureType(tex.getType(), image.getMultiSamples(), -1);
+        if (prevTexId != 0) {
+            gl.glBindTexture(target, prevTexId);
+            context.boundTextures[0] = prevRef;
+        } else {
+            gl.glBindTexture(target, 0);
+            context.boundTextures[0] = null;
+        }
+        context.bindlessHandles[0] = prevBindlessHandle;
+    }
+
     /**
      * Computes a packed key representing all sampler parameters that affect
      * the bindless handle for a texture.  Two textures sharing the same

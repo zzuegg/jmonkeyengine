@@ -4,6 +4,7 @@ MaterialDef TestCompute {
         Int Width
         Int Height
         Float Time
+        Image2D OutputImage
     }
 
     Technique FillPattern {

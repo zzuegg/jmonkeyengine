@@ -51,6 +51,7 @@ import com.jme3.scene.shape.Quad;
 import com.jme3.texture.FrameBuffer;
 import com.jme3.texture.Image;
 import com.jme3.texture.Texture2D;
+import com.jme3.texture.TextureImage;
 import com.jme3.texture.image.ColorSpace;
 import org.jmonkeyengine.screenshottests.testframework.ScreenshotTestBase;
 import org.junit.jupiter.api.Test;
@@ -166,15 +167,11 @@ public class TestComputeShader extends ScreenshotTestBase {
         private void doCheckerboard(Renderer renderer, RenderManager renderManager, int texSize) {
             Texture2D tex = createEmptyTexture(texSize);
 
-            // Force texture upload to GPU before binding as image
-            uploadTexture(renderer, tex);
-            renderer.bindImageTexture(0, tex, 0, false, 0,
-                    GL4.GL_WRITE_ONLY, GL4.GL_RGBA8);
-
             Material computeMat = new Material(assetManager, "Common/MatDefs/Compute/TestCompute.j3md");
             computeMat.setInt("Width", texSize);
             computeMat.setInt("Height", texSize);
             computeMat.setFloat("Time", 0f);
+            computeMat.setImage("OutputImage", tex, TextureImage.Access.WriteOnly);
             computeMat.dispatch("FillPattern", renderManager,
                     divRoundUp(texSize, 16), divRoundUp(texSize, 16), 1);
             renderer.memoryBarrier(GL4.GL_ALL_BARRIER_BITS);
@@ -186,25 +183,19 @@ public class TestComputeShader extends ScreenshotTestBase {
             Texture2D texPattern = createEmptyTexture(texSize);
             Texture2D texGradient = createEmptyTexture(texSize);
 
-            // Force texture upload to GPU
-            uploadTexture(renderer, texPattern);
-            uploadTexture(renderer, texGradient);
-
             Material computeMat = new Material(assetManager, "Common/MatDefs/Compute/TestCompute.j3md");
             computeMat.setInt("Width", texSize);
             computeMat.setInt("Height", texSize);
             computeMat.setFloat("Time", 0f);
 
             // Dispatch pattern
-            renderer.bindImageTexture(0, texPattern, 0, false, 0,
-                    GL4.GL_WRITE_ONLY, GL4.GL_RGBA8);
+            computeMat.setImage("OutputImage", texPattern, TextureImage.Access.WriteOnly);
             computeMat.dispatch("FillPattern", renderManager,
                     divRoundUp(texSize, 16), divRoundUp(texSize, 16), 1);
             renderer.memoryBarrier(GL4.GL_ALL_BARRIER_BITS);
 
             // Dispatch gradient
-            renderer.bindImageTexture(0, texGradient, 0, false, 0,
-                    GL4.GL_WRITE_ONLY, GL4.GL_RGBA8);
+            computeMat.setImage("OutputImage", texGradient, TextureImage.Access.WriteOnly);
             computeMat.dispatch("FillGradient", renderManager,
                     divRoundUp(texSize, 16), divRoundUp(texSize, 16), 1);
             renderer.memoryBarrier(GL4.GL_ALL_BARRIER_BITS);
@@ -245,17 +236,6 @@ public class TestComputeShader extends ScreenshotTestBase {
         tex.setMinFilter(com.jme3.texture.Texture.MinFilter.NearestNoMipMaps);
         tex.setMagFilter(com.jme3.texture.Texture.MagFilter.Nearest);
         return tex;
-    }
-
-    /**
-     * Forces a texture to be uploaded to GPU so it can be used with bindImageTexture.
-     */
-    private static void uploadTexture(Renderer renderer, Texture2D tex) {
-        try {
-            renderer.setTexture(0, tex);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to upload texture to GPU", e);
-        }
     }
 
     private static int divRoundUp(int a, int b) {

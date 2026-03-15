@@ -301,6 +301,9 @@ public class J3MLoader implements AssetLoader {
     private Object readValue(final VarType type, final String value) throws IOException{
         if (type.isTextureType()) {
             return parseTextureType(type, value);
+        } else if (type.isImageType()) {
+            throw new IOException("Image2D/Image3D parameters cannot have default values in material files. "
+                    + "Set them at runtime via Material.setImage().");
         } else {
             String[] split = value.trim().split(whitespacePattern);
             switch (type){
@@ -401,6 +404,10 @@ public class J3MLoader implements AssetLoader {
         }
         if(type.isTextureType()){
             materialDef.addMaterialParamTexture(type, name, colorSpace,(Texture)defaultValObj);
+        }else if(type.isImageType()){
+            // Image2D/Image3D params have no default value in .j3md files —
+            // they are bound at runtime via Material.setImage().
+            materialDef.addMaterialParam(type, name, null);
         }else{
             materialDef.addMaterialParam(type, name, defaultValObj);
         }
