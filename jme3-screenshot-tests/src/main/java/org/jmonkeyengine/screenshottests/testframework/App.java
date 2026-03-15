@@ -63,10 +63,4 @@ public class App extends SimpleApplication {
         onError.accept(t);
     }
 
-    public void setOnError(Consumer<Throwable> onError) {
-        this.onError = onError;
-        AppSettings appSettings=new AppSettings(true);
-
-    }
-
 }
