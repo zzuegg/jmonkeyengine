@@ -498,7 +498,13 @@ public enum Caps {
     /**
      * Supports compute shaders (OpenGL 4.3+).
      */
-    ComputeShader
+    ComputeShader,
+
+    /**
+     * Supports querying GPU memory information.
+     * Available via GL_NVX_gpu_memory_info (NVIDIA) or GL_ATI_meminfo (AMD).
+     */
+    GpuMemoryInfo
     ;
 
     /**

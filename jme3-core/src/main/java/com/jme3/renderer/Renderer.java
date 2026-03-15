@@ -628,6 +628,20 @@ public interface Renderer {
     }
 
     /**
+     * Queries GPU memory information at runtime.
+     * <p>
+     * Automatically uses the best available extension:
+     * {@code GL_NVX_gpu_memory_info} on NVIDIA or {@code GL_ATI_meminfo} on AMD.
+     * All fields in the returned object are {@code -1} if no memory query
+     * extension is supported.
+     *
+     * @return a snapshot of GPU memory information
+     */
+    default GpuMemoryInfo getGpuMemoryInfo() {
+        return new GpuMemoryInfo(-1, -1, -1);
+    }
+
+    /**
      * Dispatches the currently bound compute shader with the given work group counts.
      * Requires {@link Caps#ComputeShader}.
      *

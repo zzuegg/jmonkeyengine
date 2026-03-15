@@ -106,6 +106,16 @@ public interface GLExt {
     public static final int GL_UNSIGNED_INT_24_8_EXT = 0x84FA;
     public static final int GL_UNSIGNED_INT_5_9_9_9_REV_EXT = 0x8C3E;
     public static final int GL_WAIT_FAILED = 0x911D;
+
+    // GL_NVX_gpu_memory_info (NVIDIA, also exposed by Mesa for AMD)
+    public static final int GL_GPU_MEMORY_INFO_DEDICATED_VIDMEM_NVX = 0x9047;
+    public static final int GL_GPU_MEMORY_INFO_TOTAL_AVAILABLE_MEMORY_NVX = 0x9048;
+    public static final int GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX = 0x9049;
+
+    // GL_ATI_meminfo (AMD) — only GL_TEXTURE_FREE_MEMORY_ATI is used because
+    // all three queries (texture/VBO/renderbuffer) return identical values on
+    // unified memory architectures.
+    public static final int GL_TEXTURE_FREE_MEMORY_ATI = 0x87FC;
     
     // OpenGL 4.2 texture compression, we now check these through the extension
     public static final int GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT = 0x8E8E;
