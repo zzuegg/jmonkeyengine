@@ -119,6 +119,8 @@ public final class GLRenderer implements Renderer {
     private boolean debug = false;
     private int debugGroupId = 0;
     private boolean bindlessTextureEnabled = false;
+    private boolean hasNvxMemoryInfo = false;
+    private boolean hasAtiMeminfo = false;
 
 
     public GLRenderer(GL gl, GLExt glext, GLFbo glfbo) {
@@ -208,6 +210,25 @@ public final class GLRenderer implements Renderer {
     @Override
     public EnumMap<Limits, Integer> getLimits() {
         return limits;
+    }
+
+    @Override
+    public GpuMemoryInfo getGpuMemoryInfo() {
+        if (hasNvxMemoryInfo) {
+            int dedicated = getInteger(GLExt.GL_GPU_MEMORY_INFO_DEDICATED_VIDMEM_NVX);
+            int totalAvailable = getInteger(GLExt.GL_GPU_MEMORY_INFO_TOTAL_AVAILABLE_MEMORY_NVX);
+            int currentAvailable = getInteger(GLExt.GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX);
+            return new GpuMemoryInfo(dedicated, totalAvailable, currentAvailable);
+        } else if (hasAtiMeminfo) {
+            // GL_ATI_meminfo returns 4 ints: [0]=total free in pool,
+            // [1]=largest free block, [2]=total free aux, [3]=largest free aux.
+            // We use element [0] (total free in pool) from the texture query.
+            intBuf16.clear();
+            gl.glGetInteger(GLExt.GL_TEXTURE_FREE_MEMORY_ATI, intBuf16);
+            int currentAvailable = intBuf16.get(0);
+            return new GpuMemoryInfo(-1, -1, currentAvailable);
+        }
+        return new GpuMemoryInfo(-1, -1, -1);
     }
 
     private HashSet<String> loadExtensions() {
@@ -548,6 +569,16 @@ public final class GLRenderer implements Renderer {
         if (hasExtension("GL_ARB_bindless_texture")) {
             caps.add(Caps.BindlessTexture);
             logger.log(Level.FINE, "Bindless texture support detected (GL_ARB_bindless_texture)");
+        }
+
+        if (hasExtension("GL_NVX_gpu_memory_info")) {
+            hasNvxMemoryInfo = true;
+            caps.add(Caps.GpuMemoryInfo);
+            logger.log(Level.FINE, "GPU memory info support detected (GL_NVX_gpu_memory_info)");
+        } else if (hasExtension("GL_ATI_meminfo")) {
+            hasAtiMeminfo = true;
+            caps.add(Caps.GpuMemoryInfo);
+            logger.log(Level.FINE, "GPU memory info support detected (GL_ATI_meminfo)");
         }
 
         if (hasExtension("GL_EXT_framebuffer_object")
