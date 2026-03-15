@@ -1137,6 +1137,53 @@ public class Material implements CloneableSmartAsset, Cloneable, Savable {
         render(geom, geom.getWorldLightList(), rm);
     }
 
+    /**
+     * Selects the named compute technique and dispatches it with the given work group counts.
+     * <p>
+     * Material parameters are bound the same way as for rendering techniques.
+     * Memory barriers are NOT issued automatically — call
+     * {@link Renderer#memoryBarrier(int)} after dispatch if needed.
+     *
+     * @param techniqueName the name of the compute technique to use
+     * @param renderManager the RenderManager
+     * @param numGroupsX work groups in X
+     * @param numGroupsY work groups in Y
+     * @param numGroupsZ work groups in Z
+     */
+    public void dispatch(String techniqueName, RenderManager renderManager,
+                         int numGroupsX, int numGroupsY, int numGroupsZ) {
+        selectTechnique(techniqueName, renderManager);
+
+        TechniqueDef techniqueDef = technique.getDef();
+        if (!techniqueDef.isComputeOnly()) {
+            throw new IllegalStateException(
+                "Technique '" + techniqueName + "' is not a compute technique. "
+                + "Use Material.render() for rendering techniques.");
+        }
+
+        Renderer renderer = renderManager.getRenderer();
+        EnumSet<Caps> rendererCaps = renderer.getCaps();
+
+        // Get/compile shader with current defines.
+        // No world overrides — compute dispatch is not associated with scene graph
+        // geometry, so MatParamOverride from the scene graph does not apply.
+        Shader shader = technique.makeCurrent(
+            renderManager, null, renderManager.getForcedMatParams(), null, rendererCaps);
+
+        // Bind world uniforms
+        clearUniformsSetByCurrent(shader);
+        renderManager.updateUniformBindings(shader);
+
+        // Set material parameters
+        updateShaderMaterialParameters(renderer, shader, null, renderManager.getForcedMatParams());
+
+        // Reset untracked uniforms
+        resetUniformsNotSetByCurrent(shader);
+
+        // Dispatch
+        technique.dispatch(renderManager, shader, numGroupsX, numGroupsY, numGroupsZ);
+    }
+
     @Override
     public String toString() {
         return "Material[name=" + name +

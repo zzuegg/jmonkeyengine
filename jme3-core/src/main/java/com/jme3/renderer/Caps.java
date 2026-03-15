@@ -493,7 +493,12 @@ public enum Caps {
      *
      * <p>Not supported on Intel iGPUs, macOS, or OpenGL ES.
      */
-    BindlessTexture
+    BindlessTexture,
+
+    /**
+     * Supports compute shaders (OpenGL 4.3+).
+     */
+    ComputeShader
     ;
 
     /**

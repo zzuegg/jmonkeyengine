@@ -332,4 +332,17 @@ public class NullRenderer implements Renderer {
     public void registerNativeObject(NativeObject nativeObject) {
 
     }
+
+    @Override
+    public void dispatchCompute(int numGroupsX, int numGroupsY, int numGroupsZ) {
+    }
+
+    @Override
+    public void memoryBarrier(int barrierBits) {
+    }
+
+    @Override
+    public void bindImageTexture(int unit, Texture tex, int level,
+                                  boolean layered, int layer, int access, int format) {
+    }
 }

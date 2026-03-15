@@ -167,7 +167,22 @@ public final class Technique {
         TechniqueDefLogic logic = def.getLogic();
         logic.render(renderManager, shader, geometry, lights, lastBindUnits);
     }
-    
+
+    /**
+     * Dispatches this technique as a compute shader.
+     *
+     * @param renderManager The render manager to dispatch against.
+     * @param shader The shader selected by makeCurrent.
+     * @param numGroupsX work groups in X
+     * @param numGroupsY work groups in Y
+     * @param numGroupsZ work groups in Z
+     */
+    void dispatch(RenderManager renderManager, Shader shader,
+                  int numGroupsX, int numGroupsY, int numGroupsZ) {
+        TechniqueDefLogic logic = def.getLogic();
+        logic.dispatch(renderManager, shader, numGroupsX, numGroupsY, numGroupsZ);
+    }
+
     /**
      * Get the {@link DefineList} for dynamic defines.
      * 

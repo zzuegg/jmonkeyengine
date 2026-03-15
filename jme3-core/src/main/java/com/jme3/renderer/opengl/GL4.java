@@ -52,6 +52,17 @@ public interface GL4 extends GL3 {
      */
     public static final int GL_SHADER_STORAGE_BARRIER_BIT = 0x00002000;
     public static final int GL_TEXTURE_FETCH_BARRIER_BIT = 0x00000008;
+    public static final int GL_SHADER_IMAGE_ACCESS_BARRIER_BIT = 0x00000020;
+    public static final int GL_ALL_BARRIER_BITS = 0xFFFFFFFF;
+
+    public static final int GL_READ_ONLY = 0x88B8;
+    public static final int GL_WRITE_ONLY = 0x88B9;
+    public static final int GL_READ_WRITE = 0x88BA;
+    public static final int GL_RGBA8 = 0x8058;
+    public static final int GL_RGBA16F = 0x881A;
+    public static final int GL_RGBA32F = 0x8814;
+    public static final int GL_R32F = 0x822E;
+    public static final int GL_R32I = 0x8235;
 
     /**
      * Accepted by the {@code condition} parameter of FenceSync.

@@ -638,8 +638,10 @@ public final class GLRenderer implements Renderer {
             caps.add(Caps.ShaderStorageBufferObject);
             limits.put(Limits.ShaderStorageBufferObjectMaxBlockSize,
                     getInteger(GL4.GL_MAX_SHADER_STORAGE_BLOCK_SIZE));
-            // Commented out until we support ComputeShaders and the ComputeShader Cap
-            // limits.put(Limits.ShaderStorageBufferObjectMaxComputeBlocks, getInteger(GL4.GL_MAX_COMPUTE_SHADER_STORAGE_BLOCKS));
+            if (caps.contains(Caps.OpenGL43)) {
+                caps.add(Caps.ComputeShader);
+                limits.put(Limits.ShaderStorageBufferObjectMaxComputeBlocks, getInteger(GL4.GL_MAX_COMPUTE_SHADER_STORAGE_BLOCKS));
+            }
             if (caps.contains(Caps.GeometryShader)) {
                 limits.put(Limits.ShaderStorageBufferObjectMaxGeometryBlocks,
                         getInteger(GL4.GL_MAX_GEOMETRY_SHADER_STORAGE_BLOCKS));
@@ -1617,6 +1619,8 @@ public final class GLRenderer implements Renderer {
                 return GL4.GL_TESS_CONTROL_SHADER;
             case TessellationEvaluation:
                 return GL4.GL_TESS_EVALUATION_SHADER;
+            case Compute:
+                return GL4.GL_COMPUTE_SHADER;
             default:
                 throw new UnsupportedOperationException("Unrecognized shader type.");
         }
@@ -1792,6 +1796,17 @@ public final class GLRenderer implements Renderer {
 
             shader.setId(id);
             needRegister = true;
+        }
+
+        // Validate: compute cannot be mixed with other shader types
+        boolean hasCompute = false;
+        boolean hasOther = false;
+        for (ShaderSource src : shader.getSources()) {
+            if (src.getType() == ShaderType.Compute) hasCompute = true;
+            else hasOther = true;
+        }
+        if (hasCompute && hasOther) {
+            throw new RendererException("Compute shader cannot be combined with other shader types in one program");
         }
 
         // If using GLSL 1.5, we bind the outputs for the user
@@ -4037,5 +4052,38 @@ public final class GLRenderer implements Renderer {
     @Override
     public void registerNativeObject(NativeObject nativeObject) {
         objManager.registerObject(nativeObject);
+    }
+
+    @Override
+    public void dispatchCompute(int numGroupsX, int numGroupsY, int numGroupsZ) {
+        if (gl4 == null) {
+            throw new RendererException("Compute shaders require OpenGL 4.3+");
+        }
+        if (numGroupsX < 1 || numGroupsY < 1 || numGroupsZ < 1) {
+            throw new IllegalArgumentException(
+                "Work group counts must be >= 1, got: " + numGroupsX + ", " + numGroupsY + ", " + numGroupsZ);
+        }
+        gl4.glDispatchCompute(numGroupsX, numGroupsY, numGroupsZ);
+    }
+
+    @Override
+    public void memoryBarrier(int barrierBits) {
+        if (gl4 == null) {
+            throw new RendererException("Memory barriers require OpenGL 4.2+");
+        }
+        gl4.glMemoryBarrier(barrierBits);
+    }
+
+    @Override
+    public void bindImageTexture(int unit, Texture tex, int level,
+                                  boolean layered, int layer, int access, int format) {
+        if (gl4 == null) {
+            throw new RendererException("Image binding requires OpenGL 4.2+");
+        }
+        Image image = tex.getImage();
+        if (image.getId() == -1) {
+            updateTexImageData(image, tex.getType(), 0, false);
+        }
+        gl4.glBindImageTexture(unit, image.getId(), level, layered, layer, access, format);
     }
 }
