@@ -918,14 +918,14 @@ public class Material implements CloneableSmartAsset, Cloneable, Savable {
             ShaderBufferBlock.BufferType btype;
             if (type == VarType.ShaderStorageBufferObject) {
                 btype = ShaderBufferBlock.BufferType.ShaderStorageBufferObject;
-                bufferBlock.setBufferObject(btype, bufferObject);
-                renderer.setShaderStorageBufferObject(unit.bufferUnit, bufferObject); // TODO: probably not needed
             } else {
                 btype = ShaderBufferBlock.BufferType.UniformBufferObject;
-                bufferBlock.setBufferObject(btype, bufferObject);
-                renderer.setUniformBufferObject(unit.bufferUnit, bufferObject); // TODO: probably not needed
             }
-            unit.bufferUnit++;
+            // Associate buffer data with the shader block. The actual GL binding
+            // (glBindBufferBase + glShaderStorageBlockBinding) happens in
+            // GLRenderer.updateShaderBufferBlock() which uses the correct binding
+            // point from the compiled shader, not a sequential counter.
+            bufferBlock.setBufferObject(btype, bufferObject);
         } else {
             Uniform uniform = shader.getUniform(param.getPrefixedName());
             if (!override && uniform.isSetByCurrentMaterial())
