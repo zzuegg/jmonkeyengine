@@ -1547,7 +1547,7 @@ public final class GLRenderer implements Renderer {
 
         final BufferObject bufferObject = bufferBlock.getBufferObject();
         final BufferType bufferType = bufferBlock.getType();
-        
+
 
         if (bufferObject.isUpdateNeeded()) {
             if (bufferType == BufferType.ShaderStorageBufferObject) {
@@ -1564,34 +1564,38 @@ public final class GLRenderer implements Renderer {
 
         final int shaderId = shader.getId();
 
+        // Resolve the block index first — needed to query/set the binding point
+        int blockIndex = bufferBlock.getLocation();
+        if (blockIndex < 0) {
+            if (bufferType == BufferType.ShaderStorageBufferObject) {
+                blockIndex = gl4.glGetProgramResourceIndex(shaderId, GL4.GL_SHADER_STORAGE_BLOCK, bufferBlock.getName());
+            } else {
+                blockIndex = gl3.glGetUniformBlockIndex(shaderId, bufferBlock.getName());
+            }
+            bufferBlock.setLocation(blockIndex);
+        }
+
+        // Use the buffer's explicit binding if set, otherwise use the block index
+        // as a binding point (matches the common convention of layout(binding = N)
+        // where the block index often equals the binding qualifier value).
         int bindingPoint = bufferObject.getBinding();
+        if (bindingPoint < 0) {
+            bindingPoint = blockIndex >= 0 ? blockIndex : 0;
+            bufferObject.setBinding(bindingPoint);
+        }
 
         switch (bufferType) {
             case UniformBufferObject: {
-                setUniformBufferObject(bindingPoint, bufferObject); // rebind buffer if needed
-                if (bufferBlock.isUpdateNeeded()) {
-                    int blockIndex = bufferBlock.getLocation();
-                    if (blockIndex < 0) {
-                        blockIndex = gl3.glGetUniformBlockIndex(shaderId, bufferBlock.getName());
-                        bufferBlock.setLocation(blockIndex);
-                    }
-                    if (bufferBlock.getLocation() != NativeObject.INVALID_ID) {
-                        gl3.glUniformBlockBinding(shaderId, bufferBlock.getLocation(), bindingPoint);
-                    } 
+                setUniformBufferObject(bindingPoint, bufferObject);
+                if (bufferBlock.isUpdateNeeded() && blockIndex >= 0) {
+                    gl3.glUniformBlockBinding(shaderId, blockIndex, bindingPoint);
                 }
                 break;
             }
             case ShaderStorageBufferObject: {
-                setShaderStorageBufferObject(bindingPoint, bufferObject); // rebind buffer if needed
-                if (bufferBlock.isUpdateNeeded() ) {
-                    int blockIndex = bufferBlock.getLocation();
-                    if (blockIndex < 0) {
-                        blockIndex = gl4.glGetProgramResourceIndex(shaderId, GL4.GL_SHADER_STORAGE_BLOCK, bufferBlock.getName());
-                        bufferBlock.setLocation(blockIndex);
-                    }
-                    if (bufferBlock.getLocation() != NativeObject.INVALID_ID) {
-                        gl4.glShaderStorageBlockBinding(shaderId, bufferBlock.getLocation(), bindingPoint);
-                    }
+                setShaderStorageBufferObject(bindingPoint, bufferObject);
+                if (bufferBlock.isUpdateNeeded() && blockIndex >= 0) {
+                    gl4.glShaderStorageBlockBinding(shaderId, blockIndex, bindingPoint);
                 }
                 break;
             }
