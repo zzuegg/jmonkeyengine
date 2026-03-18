@@ -681,6 +681,13 @@ public class LwjglGL extends LwjglRender implements GL, GL2, GL3, GL4 {
     }
 
     @Override
+    public void glGetProgramResourceiv(final int program, final int programInterface, final int index, final int propCount, final IntBuffer props, final int bufSize, final IntBuffer length, final IntBuffer params) {
+        checkLimit(props);
+        checkLimit(params);
+        GL43.glGetProgramResourceiv(program, programInterface, index, props, length, params);
+    }
+
+    @Override
     public void glDeleteVertexArrays(final IntBuffer arrays) {
         checkLimit(arrays);
         ARBVertexArrayObject.glDeleteVertexArrays(arrays);

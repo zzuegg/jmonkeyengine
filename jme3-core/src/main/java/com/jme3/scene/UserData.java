@@ -73,6 +73,7 @@ public final class UserData implements Savable {
     private static final int   TYPE_DOUBLE       = 9;
     private static final int   TYPE_SHORT        = 10;
     private static final int   TYPE_BYTE         = 11;
+    private static final int   TYPE_RUNTIME_ONLY = -1;
 
     protected byte             type;
     protected Object           value;
@@ -83,14 +84,13 @@ public final class UserData implements Savable {
     /**
      * Creates a new <code>UserData</code> with the given
      * type and value.
-     * 
+     *
      * @param type
-     *            Type of data, should be between 0 and 8.
+     *            Type of data, should be between 0 and 11, or -1 for runtime-only data.
      * @param value
      *            Value of the data
      */
     public UserData(byte type, Object value) {
-        assert type >= 0 && type <= 11;
         this.type = type;
         this.value = value;
     }
@@ -130,15 +130,18 @@ public final class UserData implements Savable {
         } else if (type instanceof Byte) {
             return TYPE_BYTE;
         } else {
-            throw new IllegalArgumentException("Unsupported type: " + type.getClass().getName());
+            return TYPE_RUNTIME_ONLY;
         }
     }
 
     @Override
     public void write(JmeExporter ex) throws IOException {
+        if (type == TYPE_RUNTIME_ONLY) {
+            return; // Runtime-only data, not serializable
+        }
         OutputCapsule oc = ex.getCapsule(this);
         oc.write(type, "type", (byte) 0);
-        
+
         switch (type) {
             case TYPE_INTEGER:
                 int i = (Integer) value;

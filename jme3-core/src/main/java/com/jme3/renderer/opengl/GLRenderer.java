@@ -1548,7 +1548,6 @@ public final class GLRenderer implements Renderer {
         final BufferObject bufferObject = bufferBlock.getBufferObject();
         final BufferType bufferType = bufferBlock.getType();
 
-
         if (bufferObject.isUpdateNeeded()) {
             if (bufferType == BufferType.ShaderStorageBufferObject) {
                 updateShaderStorageBufferObjectData(bufferObject);
@@ -1564,7 +1563,7 @@ public final class GLRenderer implements Renderer {
 
         final int shaderId = shader.getId();
 
-        // Resolve the block index first — needed to query/set the binding point
+        // Resolve the block index first — needed to query the binding point
         int blockIndex = bufferBlock.getLocation();
         if (blockIndex < 0) {
             if (bufferType == BufferType.ShaderStorageBufferObject) {
@@ -1575,28 +1574,30 @@ public final class GLRenderer implements Renderer {
             bufferBlock.setLocation(blockIndex);
         }
 
-        // Use the buffer's explicit binding if set, otherwise use the block index
-        // as a binding point (matches the common convention of layout(binding = N)
-        // where the block index often equals the binding qualifier value).
-        int bindingPoint = bufferObject.getBinding();
+        // Block not found in the shader — skip silently
+        if (blockIndex < 0 || blockIndex == 0xFFFFFFFF) {
+            bufferBlock.clearUpdateNeeded();
+            return;
+        }
+
+        // Query the binding point from the compiled shader (layout(binding=N))
+        // and cache it on the ShaderBufferBlock
+        int bindingPoint = bufferBlock.getBinding();
         if (bindingPoint < 0) {
-            bindingPoint = blockIndex >= 0 ? blockIndex : 0;
-            bufferObject.setBinding(bindingPoint);
+            int programInterface = (bufferType == BufferType.ShaderStorageBufferObject)
+                    ? GL4.GL_SHADER_STORAGE_BLOCK
+                    : GL4.GL_UNIFORM_BLOCK;
+            bindingPoint = queryBlockBinding(shaderId, programInterface, blockIndex);
+            bufferBlock.setBinding(bindingPoint);
         }
 
         switch (bufferType) {
             case UniformBufferObject: {
                 setUniformBufferObject(bindingPoint, bufferObject);
-                if (bufferBlock.isUpdateNeeded() && blockIndex >= 0) {
-                    gl3.glUniformBlockBinding(shaderId, blockIndex, bindingPoint);
-                }
                 break;
             }
             case ShaderStorageBufferObject: {
                 setShaderStorageBufferObject(bindingPoint, bufferObject);
-                if (bufferBlock.isUpdateNeeded() && blockIndex >= 0) {
-                    gl4.glShaderStorageBlockBinding(shaderId, blockIndex, bindingPoint);
-                }
                 break;
             }
             default: {
@@ -1627,6 +1628,23 @@ public final class GLRenderer implements Renderer {
      *
      * @param shader the shader.
      */
+    private final IntBuffer propsBuf = BufferUtils.createIntBuffer(1);
+    private final IntBuffer lengthBuf = BufferUtils.createIntBuffer(1);
+    private final IntBuffer resultBuf = BufferUtils.createIntBuffer(1);
+
+    /**
+     * Queries the binding point of a shader buffer block from the compiled program
+     * using glGetProgramResourceiv with GL_BUFFER_BINDING.
+     */
+    private int queryBlockBinding(int shaderId, int programInterface, int blockIndex) {
+        propsBuf.clear();
+        propsBuf.put(GL4.GL_BUFFER_BINDING).flip();
+        lengthBuf.clear();
+        resultBuf.clear();
+        gl4.glGetProgramResourceiv(shaderId, programInterface, blockIndex, 1, propsBuf, 1, lengthBuf, resultBuf);
+        return resultBuf.get(0);
+    }
+
     protected void updateShaderBufferBlocks(final Shader shader) {
         final ListMap<String, ShaderBufferBlock> bufferBlocks = shader.getBufferBlockMap();
         for (int i = 0; i < bufferBlocks.size(); i++) {

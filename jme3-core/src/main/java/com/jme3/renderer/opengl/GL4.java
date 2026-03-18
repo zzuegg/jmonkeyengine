@@ -31,9 +31,11 @@
  */
 package com.jme3.renderer.opengl;
 
+import java.nio.IntBuffer;
+
 /**
  * GL functions only available on vanilla desktop OpenGL 4.0.
- * 
+ *
  * @author Kirill Vainer
  */
 public interface GL4 extends GL3 {
@@ -87,6 +89,17 @@ public interface GL4 extends GL3 {
      */
     public static final int GL_SHADER_STORAGE_BUFFER = 0x90D2;
     public static final int GL_SHADER_STORAGE_BLOCK = 0x92E6;
+
+    /**
+     * Accepted by the {@code programInterface} parameter of GetProgramResourceIndex and GetProgramResourceiv.
+     */
+    public static final int GL_UNIFORM_BLOCK = 0x92E2;
+
+    /**
+     * Accepted by the {@code props} parameter of GetProgramResourceiv.
+     * Queries the buffer binding point assigned to an active shader storage block or uniform block.
+     */
+    public static final int GL_BUFFER_BINDING = 0x9302;
 
     /**
      *  Accepted by the &lt;pname&gt; parameter of GetIntegerv, GetBooleanv,
@@ -316,5 +329,23 @@ public interface GL4 extends GL3 {
      *                    If zero, structures are assumed to be tightly packed.
      */
     public void glMultiDrawArraysIndirectCount(int mode, long indirect, long drawCount, int maxDrawCount, int stride);
+
+    /**
+     * <p><a target="_blank" href="http://docs.gl/gl4/glGetProgramResource">Reference Page</a></p>
+     * <p>
+     * Retrieves values for multiple properties of a single active resource within a program object.
+     *
+     * @param program          the name of a program object whose resources to query.
+     * @param programInterface a token identifying the interface within program containing the resource to query.
+     * @param index            the active resource index.
+     * @param propCount        the number of properties being queried.
+     * @param props            the property tokens to query.
+     * @param bufSize          the size of the integer buffer for returned values.
+     * @param length           a variable which will receive the number of values returned.
+     * @param params            a buffer in which the returned values will be stored.
+     */
+    default void glGetProgramResourceiv(int program, int programInterface, int index, int propCount, IntBuffer props, int bufSize, IntBuffer length, IntBuffer params) {
+        throw new UnsupportedOperationException("glGetProgramResourceiv not supported by this GL implementation");
+    }
 
 }

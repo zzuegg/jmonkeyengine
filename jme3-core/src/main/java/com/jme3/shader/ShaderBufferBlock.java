@@ -54,6 +54,11 @@ public class ShaderBufferBlock extends ShaderVariable {
     protected BufferType type;
 
     /**
+     * The GLSL layout(binding=N) value for this block, queried from the compiled shader.
+     */
+    protected int binding = -1;
+
+    /**
      * Set the new buffer object.
      *
      * @param bufferObject
@@ -91,10 +96,29 @@ public class ShaderBufferBlock extends ShaderVariable {
     }
 
     /**
+     * Get the GLSL binding point for this block.
+     *
+     * @return the binding point, or -1 if not yet queried.
+     */
+    public int getBinding() {
+        return binding;
+    }
+
+    /**
+     * Set the GLSL binding point for this block.
+     *
+     * @param binding the binding point queried from the compiled shader.
+     */
+    public void setBinding(int binding) {
+        this.binding = binding;
+    }
+
+    /**
      * Reset this storage block.
      */
     public void reset() {
         location = -1;
+        binding = -1;
         updateNeeded = true;
     }
 
