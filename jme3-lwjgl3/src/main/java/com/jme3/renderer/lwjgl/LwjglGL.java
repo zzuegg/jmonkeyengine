@@ -709,6 +709,11 @@ public class LwjglGL extends LwjglRender implements GL, GL2, GL3, GL4 {
     }
 
     @Override
+    public int glGetActiveUniformBlocki(final int program, final int uniformBlockIndex, final int pname) {
+        return GL31.glGetActiveUniformBlocki(program, uniformBlockIndex, pname);
+    }
+
+    @Override
     public void glDrawElementsIndirect(final int mode, final int type, final long indirect) {
         GL43.glDrawElementsIndirect(mode, type, indirect);
     }

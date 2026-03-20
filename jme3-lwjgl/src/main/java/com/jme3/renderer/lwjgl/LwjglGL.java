@@ -662,6 +662,11 @@ public final class LwjglGL implements GL, GL2, GL3, GL4 {
     }
 
     @Override
+    public int glGetActiveUniformBlocki(final int program, final int uniformBlockIndex, final int pname) {
+        return GL31.glGetActiveUniformBlocki(program, uniformBlockIndex, pname);
+    }
+
+    @Override
     public void glDrawElementsIndirect(int mode, int type, long indirect) {
         throw new UnsupportedOperationException("glDrawElementsIndirect is not supported by the legacy LWJGL2 renderer");
     }
