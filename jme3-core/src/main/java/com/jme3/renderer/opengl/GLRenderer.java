@@ -1580,14 +1580,28 @@ public final class GLRenderer implements Renderer {
             return;
         }
 
-        // Query the binding point from the compiled shader (layout(binding=N))
-        // and cache it on the ShaderBufferBlock
+        // Query or assign the binding point for this buffer block.
+        // If the shader declares layout(binding=N), we query it.
+        // If no explicit binding was declared, we assign one using
+        // glShaderStorageBlockBinding / glUniformBlockBinding.
         int bindingPoint = bufferBlock.getBinding();
         if (bindingPoint < 0) {
             int programInterface = (bufferType == BufferType.ShaderStorageBufferObject)
                     ? GL4.GL_SHADER_STORAGE_BLOCK
                     : GL4.GL_UNIFORM_BLOCK;
             bindingPoint = queryBlockBinding(shaderId, programInterface, blockIndex);
+
+            // Binding 0 from query means no explicit layout(binding=N) was set.
+            // Assign a unique binding point so multiple blocks don't collide.
+            if (bindingPoint == 0) {
+                bindingPoint = blockIndex;
+                if (bufferType == BufferType.ShaderStorageBufferObject) {
+                    gl4.glShaderStorageBlockBinding(shaderId, blockIndex, bindingPoint);
+                } else {
+                    gl3.glUniformBlockBinding(shaderId, blockIndex, bindingPoint);
+                }
+            }
+
             bufferBlock.setBinding(bindingPoint);
         }
 
