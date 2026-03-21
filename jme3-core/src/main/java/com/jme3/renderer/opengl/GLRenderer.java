@@ -1559,47 +1559,11 @@ public final class GLRenderer implements Renderer {
         int usage = resolveUsageHint(bufferObject.getAccessHint(), bufferObject.getNatureHint());
         if (usage == -1) return; // cpu only
 
-        bindProgram(shader);
-
-        final int shaderId = shader.getId();
-
-        // Resolve the block index first — needed to query the binding point
-        int blockIndex = bufferBlock.getLocation();
-        if (blockIndex < 0) {
-            if (bufferType == BufferType.ShaderStorageBufferObject) {
-                blockIndex = gl4.glGetProgramResourceIndex(shaderId, GL4.GL_SHADER_STORAGE_BLOCK, bufferBlock.getName());
-            } else {
-                blockIndex = gl3.glGetUniformBlockIndex(shaderId, bufferBlock.getName());
-            }
-            bufferBlock.setLocation(blockIndex);
-        }
-
-        // Block not found in the shader — skip silently
-        if (blockIndex < 0 || blockIndex == 0xFFFFFFFF) {
-            bufferBlock.clearUpdateNeeded();
-            return;
-        }
-
-        // Resolve the binding point for this block. First try to read the
-        // binding declared in the shader (layout(binding=N)). If the query
-        // returns 0 the shader may not have an explicit binding, so fall
-        // back to blockIndex to avoid multiple blocks colliding on point 0.
         int bindingPoint = bufferBlock.getBinding();
         if (bindingPoint < 0) {
-            if (bufferType == BufferType.ShaderStorageBufferObject) {
-                bindingPoint = queryShaderStorageBlockBinding(shaderId, blockIndex);
-            } else {
-                bindingPoint = gl3.glGetActiveUniformBlocki(shaderId, blockIndex, GL3.GL_UNIFORM_BLOCK_BINDING);
-            }
-            if (bindingPoint == 0) {
-                bindingPoint = blockIndex;
-            }
-            if (bufferType == BufferType.ShaderStorageBufferObject) {
-                gl4.glShaderStorageBlockBinding(shaderId, blockIndex, bindingPoint);
-            } else {
-                gl3.glUniformBlockBinding(shaderId, blockIndex, bindingPoint);
-            }
-            bufferBlock.setBinding(bindingPoint);
+            // Binding not yet resolved — skip until resolveBufferBlockBindings runs
+            bufferBlock.clearUpdateNeeded();
+            return;
         }
 
         switch (bufferType) {
@@ -1644,8 +1608,8 @@ public final class GLRenderer implements Renderer {
     private final IntBuffer resultBuf = BufferUtils.createIntBuffer(1);
 
     /**
-     * Queries the binding point of a shader storage block from the compiled program
-     * using glGetProgramResourceiv with GL_BUFFER_BINDING.
+     * Queries the binding point of a shader storage block using
+     * glGetProgramResourceiv with GL_BUFFER_BINDING.
      *
      * @param program the shader program id.
      * @param blockIndex the block index within the program.
@@ -1660,8 +1624,103 @@ public final class GLRenderer implements Renderer {
         return resultBuf.get(0);
     }
 
+    /**
+     * Resolves binding points for all buffer blocks in a shader. Runs once
+     * per shader program. Queries the binding from the compiled shader,
+     * detects collisions, and reassigns duplicates to unique binding points.
+     *
+     * @param shader the shader whose buffer blocks to resolve.
+     */
+    private void resolveBufferBlockBindings(final Shader shader) {
+        final ListMap<String, ShaderBufferBlock> bufferBlocks = shader.getBufferBlockMap();
+        final int shaderId = shader.getId();
+
+        bindProgram(shader);
+
+        // Pass 1: resolve block indices and query bindings from the compiled shader
+        for (int i = 0; i < bufferBlocks.size(); i++) {
+            ShaderBufferBlock block = bufferBlocks.getValue(i);
+            if (block.getBinding() >= 0) continue; // already resolved
+
+            BufferType bufferType = block.getType();
+            if (bufferType == null) continue; // not yet configured
+
+            // Resolve block index (location)
+            int blockIndex = block.getLocation();
+            if (blockIndex < 0) {
+                if (bufferType == BufferType.ShaderStorageBufferObject) {
+                    blockIndex = gl4.glGetProgramResourceIndex(shaderId, GL4.GL_SHADER_STORAGE_BLOCK, block.getName());
+                } else {
+                    blockIndex = gl3.glGetUniformBlockIndex(shaderId, block.getName());
+                }
+                block.setLocation(blockIndex);
+            }
+
+            if (blockIndex < 0 || blockIndex == NativeObject.INVALID_ID) {
+                continue;
+            }
+
+            // Query the binding declared in the shader
+            int binding;
+            if (bufferType == BufferType.ShaderStorageBufferObject) {
+                binding = queryShaderStorageBlockBinding(shaderId, blockIndex);
+            } else {
+                binding = gl3.glGetActiveUniformBlocki(shaderId, blockIndex, GL3.GL_UNIFORM_BLOCK_BINDING);
+            }
+            block.setBinding(binding);
+        }
+
+        // Pass 2: detect and resolve collisions.
+        // UBOs and SSBOs use separate GL binding namespaces, so track them independently.
+        Set<Integer> usedUboBindings = new HashSet<>();
+        Set<Integer> usedSsboBindings = new HashSet<>();
+        int nextFreeUbo = 0;
+        int nextFreeSsbo = 0;
+
+        for (int i = 0; i < bufferBlocks.size(); i++) {
+            ShaderBufferBlock block = bufferBlocks.getValue(i);
+            int binding = block.getBinding();
+            if (binding < 0) continue;
+
+            BufferType bufferType = block.getType();
+            Set<Integer> usedBindings;
+            if (bufferType == BufferType.ShaderStorageBufferObject) {
+                usedBindings = usedSsboBindings;
+            } else {
+                usedBindings = usedUboBindings;
+            }
+
+            if (!usedBindings.add(binding)) {
+                // Collision within the same namespace — find a free binding point
+                if (bufferType == BufferType.ShaderStorageBufferObject) {
+                    while (usedBindings.contains(nextFreeSsbo)) nextFreeSsbo++;
+                    binding = nextFreeSsbo;
+                } else {
+                    while (usedBindings.contains(nextFreeUbo)) nextFreeUbo++;
+                    binding = nextFreeUbo;
+                }
+                usedBindings.add(binding);
+                block.setBinding(binding);
+            }
+
+            // Set the binding on the shader program
+            int blockIndex = block.getLocation();
+            if (bufferType == BufferType.ShaderStorageBufferObject) {
+                gl4.glShaderStorageBlockBinding(shaderId, blockIndex, binding);
+            } else {
+                gl3.glUniformBlockBinding(shaderId, blockIndex, binding);
+            }
+        }
+    }
+
     protected void updateShaderBufferBlocks(final Shader shader) {
         final ListMap<String, ShaderBufferBlock> bufferBlocks = shader.getBufferBlockMap();
+
+        // Resolve binding points once per shader, detecting and fixing collisions
+        if (bufferBlocks.size() > 0 && bufferBlocks.getValue(0).getBinding() < 0) {
+            resolveBufferBlockBindings(shader);
+        }
+
         for (int i = 0; i < bufferBlocks.size(); i++) {
             updateShaderBufferBlock(shader, bufferBlocks.getValue(i));
         }
@@ -1691,6 +1750,45 @@ public final class GLRenderer implements Renderer {
                 return GL4.GL_COMPUTE_SHADER;
             default:
                 throw new UnsupportedOperationException("Unrecognized shader type.");
+        }
+    }
+
+    private static final Pattern BUFFER_BLOCK_PATTERN = Pattern.compile(
+            "layout\\s*\\([^)]*\\)\\s*(buffer|uniform)\\s+\\w+");
+
+    private static final Pattern BINDING_ZERO_PATTERN = Pattern.compile(
+            "layout\\s*\\([^)]*binding\\s*=\\s*0[^)]*\\)\\s*(buffer|uniform)\\s+\\w+");
+
+    /**
+     * Checks that layout(binding=0) is not used on a non-first buffer block,
+     * since the GL query cannot distinguish explicit binding=0 from the
+     * default, making collision detection unreliable for that case.
+     *
+     * @param source the GLSL source code.
+     * @param sourceName the name of the shader source for error messages.
+     */
+    private void validateBufferBlockBindings(String source, String sourceName) {
+        Matcher allBlocks = BUFFER_BLOCK_PATTERN.matcher(source);
+        Matcher binding0Blocks = BINDING_ZERO_PATTERN.matcher(source);
+
+        // Find positions of all buffer/uniform block declarations
+        List<Integer> allPositions = new ArrayList<>();
+        while (allBlocks.find()) {
+            allPositions.add(allBlocks.start());
+        }
+
+        if (allPositions.size() < 2) return; // single block, no ambiguity possible
+
+        int firstBlockPos = allPositions.get(0);
+
+        while (binding0Blocks.find()) {
+            if (binding0Blocks.start() != firstBlockPos) {
+                throw new RendererException(
+                        "Shader '" + sourceName + "' uses layout(binding=0) on a non-first "
+                        + "buffer block. This is ambiguous because the GL query cannot "
+                        + "distinguish explicit binding=0 from the default. Use a non-zero "
+                        + "binding or declare this block first in the shader.");
+            }
         }
     }
 
@@ -1767,6 +1865,8 @@ public final class GLRenderer implements Renderer {
         stringBuf.append("#define ").append(source.getType().name().toUpperCase()).append("_SHADER 1\n");
 
         stringBuf.append(source.getDefines());
+
+        validateBufferBlockBindings(source.getSource(), source.getName());
 
         if (injectBindless) {
             // Insert layout qualifier after all #extension/#import/preprocessor

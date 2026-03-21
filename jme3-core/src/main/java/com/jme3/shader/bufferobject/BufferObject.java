@@ -192,6 +192,7 @@ public class BufferObject extends NativeObject implements Savable {
         }
         this.data = BufferUtils.createByteBuffer(data.limit() - data.position());
         this.data.put(data);
+        setUpdateNeeded();
     }
 
 
