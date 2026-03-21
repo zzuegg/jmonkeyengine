@@ -1603,10 +1603,6 @@ public final class GLRenderer implements Renderer {
      *
      * @param shader the shader.
      */
-    private final IntBuffer propsBuf = BufferUtils.createIntBuffer(1);
-    private final IntBuffer lengthBuf = BufferUtils.createIntBuffer(1);
-    private final IntBuffer resultBuf = BufferUtils.createIntBuffer(1);
-
     /**
      * Queries the binding point of a shader storage block using
      * glGetProgramResourceiv with GL_BUFFER_BINDING.
@@ -1616,12 +1612,11 @@ public final class GLRenderer implements Renderer {
      * @return the binding point assigned to the block.
      */
     private int queryShaderStorageBlockBinding(int program, int blockIndex) {
-        propsBuf.clear();
-        propsBuf.put(GL4.GL_BUFFER_BINDING).flip();
-        lengthBuf.clear();
-        resultBuf.clear();
-        gl4.glGetProgramResourceiv(program, GL4.GL_SHADER_STORAGE_BLOCK, blockIndex, 1, propsBuf, 1, lengthBuf, resultBuf);
-        return resultBuf.get(0);
+        intBuf16.clear();
+        intBuf16.put(GL4.GL_BUFFER_BINDING).flip();
+        intBuf1.clear();
+        gl4.glGetProgramResourceiv(program, GL4.GL_SHADER_STORAGE_BLOCK, blockIndex, 1, intBuf16, 1, null, intBuf1);
+        return intBuf1.get(0);
     }
 
     /**
