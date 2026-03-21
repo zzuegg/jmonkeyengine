@@ -809,6 +809,22 @@ public class J3MLoader implements AssetLoader {
             return;
         }
 
+        // Check if this technique block has full shader declarations (vertex + fragment).
+        // If so, it's a new technique variant set (e.g. a second Default technique with
+        // different LightMode), not an override of the existing technique.
+        boolean hasVertexShader = false;
+        boolean hasFragmentShader = false;
+        for (Statement st : techStat.getContents()) {
+            String stLine = st.getLine();
+            if (stLine.startsWith("VertexShader")) hasVertexShader = true;
+            if (stLine.startsWith("FragmentShader")) hasFragmentShader = true;
+        }
+        if (hasVertexShader && hasFragmentShader) {
+            // Full technique declaration — treat as a new variant set
+            readTechnique(techStat);
+            return;
+        }
+
         // Parse child's technique block into temporary state
         EnumMap<Shader.ShaderType, String> childShaderNames = new EnumMap<>(Shader.ShaderType.class);
         List<EnumMap<Shader.ShaderType, String>> childShaderLanguages = new ArrayList<>();
@@ -1074,7 +1090,37 @@ public class J3MLoader implements AssetLoader {
                         continue;
                     }
 
+                    // Save state before loading parent to handle re-entrancy.
+                    // The asset manager may re-use this same J3MLoader instance
+                    // (ThreadLocal), so loading a parent j3md would clobber our fields.
+                    MaterialDef savedMaterialDef = materialDef;
+                    Material savedMaterial = material;
+                    TechniqueDef savedTechnique = technique;
+                    RenderState savedRenderState = renderState;
+                    AssetKey savedKey = key;
+                    boolean savedIsUseNodes = isUseNodes;
+                    int savedLangSize = langSize;
+                    ArrayList<String> savedPresetDefines = new ArrayList<>(presetDefines);
+                    List<EnumMap<Shader.ShaderType, String>> savedShaderLanguages = new ArrayList<>(shaderLanguages);
+                    EnumMap<Shader.ShaderType, String> savedShaderNames = new EnumMap<>(shaderNames);
+
                     MaterialDef parentDef = assetManager.loadAsset(new AssetKey<MaterialDef>(parentPath));
+
+                    // Restore state after parent load
+                    materialDef = savedMaterialDef;
+                    material = savedMaterial;
+                    technique = savedTechnique;
+                    renderState = savedRenderState;
+                    key = savedKey;
+                    isUseNodes = savedIsUseNodes;
+                    langSize = savedLangSize;
+                    presetDefines.clear();
+                    presetDefines.addAll(savedPresetDefines);
+                    shaderLanguages.clear();
+                    shaderLanguages.addAll(savedShaderLanguages);
+                    shaderNames.clear();
+                    shaderNames.putAll(savedShaderNames);
+
                     if (parentDef == null) {
                         throw new MatParseException("Parent MaterialDef " + parentPath + " cannot be found.", materialStat);
                     }

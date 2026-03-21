@@ -1,0 +1,9 @@
+MaterialDef FogParams {
+    MaterialParameters {
+        Boolean UseFog
+        Color FogColor
+        Vector2 LinearFog
+        Float ExpFog
+        Float ExpSqFog
+    }
+}
