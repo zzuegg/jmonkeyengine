@@ -1,23 +1,9 @@
-MaterialDef PBRBloomFinal {
-
+MaterialDef PBRBloomFinal : Common/MatDefs/Post/BasePostEffect.j3md {
     MaterialParameters {
-        Texture2D Texture
         Texture2D GlowMap
         Float GlowFactor : 0.05
-        Int BoundDrawBuffer
-        Int NumSamples
     }
-
     Technique {
-        VertexShader   GLSL300 GLSL150 GLSL100: Common/MatDefs/Post/Post.vert
-        FragmentShader GLSL300 GLSL150 GLSL100: Common/MatDefs/Post/SoftBloomFinal.frag
-
-        WorldParameters {
-        }
-
-        Defines {
-            BOUND_DRAW_BUFFER: BoundDrawBuffer
-            RESOLVE_MS : NumSamples
-        }
+        FragmentShader GLSL300 GLSL150 GLSL100 : Common/MatDefs/Post/SoftBloomFinal.frag
     }
 }

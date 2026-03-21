@@ -1,10 +1,7 @@
-MaterialDef Light Scattering {
+MaterialDef Light Scattering : Common/MatDefs/Post/BasePostEffect.j3md {
     MaterialParameters {
-        Int BoundDrawBuffer
-        Int NumSamples
         Int NumSamplesDepth
-        Texture2D Texture
-        Texture2D DepthTexture       
+        Texture2D DepthTexture
         Vector3 LightPosition
         Int NbSamples
         Float BlurStart
@@ -13,17 +10,9 @@ MaterialDef Light Scattering {
         Boolean Display
         Boolean multiSampledDepth
     }
-
     Technique {
-        VertexShader   GLSL300 GLSL150 GLSL120:   Common/MatDefs/Post/Post.vert
-        FragmentShader GLSL300 GLSL150 GLSL120: Common/MatDefs/Post/LightScattering.frag
-
-        WorldParameters {          
-        }
-
+        FragmentShader GLSL300 GLSL150 GLSL120 : Common/MatDefs/Post/LightScattering.frag
         Defines {
-            BOUND_DRAW_BUFFER: BoundDrawBuffer
-            RESOLVE_MS : NumSamples
             RESOLVE_DEPTH_MS : NumSamplesDepth
             DISPLAY: Display
         }

@@ -1,23 +1,8 @@
-MaterialDef Fade {
-
+MaterialDef Fade : Common/MatDefs/Post/BasePostEffect.j3md {
     MaterialParameters {
-        Int BoundDrawBuffer
-        Int NumSamples
-        Texture2D Texture
         Float Value
     }
-
     Technique {
-        VertexShader   GLSL300 GLSL150 GLSL100 :   Common/MatDefs/Post/Post.vert
-        FragmentShader GLSL300 GLSL150 GLSL100 :   Common/MatDefs/Post/Fade.frag
-
-        WorldParameters {
-        }
-
-        Defines {
-            BOUND_DRAW_BUFFER: BoundDrawBuffer
-            RESOLVE_MS : NumSamples
-        }
+        FragmentShader GLSL300 GLSL150 GLSL100 : Common/MatDefs/Post/Fade.frag
     }
-
 }

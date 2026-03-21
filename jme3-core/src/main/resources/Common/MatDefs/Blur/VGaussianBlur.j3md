@@ -1,22 +1,5 @@
-MaterialDef VGaussianBlur {
-
-    MaterialParameters {
-        Int BoundDrawBuffer
-        Int NumSamples
-        Texture2D Texture
-        Float Size
-        Float Scale
-    }
-
+MaterialDef VGaussianBlur : Common/MatDefs/Blur/HGaussianBlur.j3md {
     Technique {
-        VertexShader GLSL300 GLSL150 GLSL100  :   Common/MatDefs/Post/Post.vert
-        FragmentShader GLSL300 GLSL150 GLSL100  : Common/MatDefs/Blur/VGaussianBlur.frag
-
-        WorldParameters {
-        }
-        
-        Defines {
-            BOUND_DRAW_BUFFER: BoundDrawBuffer
-        }
+        FragmentShader GLSL300 GLSL150 GLSL100 : Common/MatDefs/Blur/VGaussianBlur.frag
     }
 }

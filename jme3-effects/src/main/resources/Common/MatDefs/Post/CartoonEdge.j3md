@@ -1,10 +1,6 @@
-MaterialDef Cartoon Edge {
-
+MaterialDef Cartoon Edge : Common/MatDefs/Post/BasePostEffect.j3md {
     MaterialParameters {
-        Int BoundDrawBuffer
-        Int NumSamples
         Int NumSamplesDepth
-        Texture2D Texture
         Texture2D NormalsTexture
         Texture2D DepthTexture
         Color EdgeColor
@@ -15,21 +11,14 @@ MaterialDef Cartoon Edge {
         Float NormalSensitivity
         Float DepthSensitivity
     }
-
-     Technique {
-        VertexShader   GLSL300 GLSL150 GLSL100 :   Common/MatDefs/Post/Post.vert
-        FragmentShader GLSL300 GLSL150 GLSL100 :   Common/MatDefs/Post/CartoonEdge.frag
-
+    Technique {
+        FragmentShader GLSL300 GLSL150 GLSL100 : Common/MatDefs/Post/CartoonEdge.frag
         WorldParameters {
             WorldViewMatrix
             ResolutionInverse
         }
-
         Defines {
-            BOUND_DRAW_BUFFER: BoundDrawBuffer
-            RESOLVE_MS : NumSamples
             RESOLVE_DEPTH_MS : NumSamplesDepth
         }
     }
-
 }

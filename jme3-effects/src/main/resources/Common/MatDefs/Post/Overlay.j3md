@@ -1,25 +1,9 @@
-MaterialDef Default GUI {
-
+MaterialDef Default GUI : Common/MatDefs/Post/BasePostEffect.j3md {
     MaterialParameters {
-        Int BoundDrawBuffer
-        Int NumSamples
         Int NumSamplesDepth
-        Texture2D Texture
-        Color Color        
+        Color Color
     }
-
     Technique {
-        VertexShader   GLSL300 GLSL150 GLSL100 :   Common/MatDefs/Post/Post.vert
         FragmentShader GLSL300 GLSL150 GLSL100 : Common/MatDefs/Post/Overlay.frag
-
-        WorldParameters {
-        }
-
-        Defines {
-            BOUND_DRAW_BUFFER: BoundDrawBuffer
-            RESOLVE_MS : NumSamples
-        }
-
     }
-
 }
