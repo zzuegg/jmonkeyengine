@@ -555,6 +555,15 @@ public interface Renderer {
     public void setUniformBufferObject(int bindingPoint, BufferObject bufferObject) ;
 
     /**
+     * Reads back the contents of a buffer object from the GPU into its
+     * CPU-side data buffer. After this call, {@link BufferObject#getData()}
+     * returns the GPU-side contents.
+     *
+     * @param bo the buffer object to read back
+     */
+    public void readBufferObjectData(BufferObject bo);
+
+    /**
      * Render using a single indirect draw command from the command buffer.
      * Whether indexed or non-indexed drawing is used is determined by whether
      * the mesh has an index buffer.

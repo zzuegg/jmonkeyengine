@@ -36,6 +36,7 @@ import com.jme3.math.Vector2f;
 import com.jme3.math.Vector3f;
 import com.jme3.math.Vector4f;
 import com.jme3.renderer.RendererException;
+import com.jme3.shader.bufferobject.BufferObject;
 import com.jme3.util.BufferUtils;
 import com.jme3.util.NativeObject;
 
@@ -170,8 +171,8 @@ public class ComputeShader extends NativeObject {
         return gl.glGetUniformLocation(id, name);
     }
 
-    public void bindShaderStorageBuffer(int location, ShaderStorageBufferObject ssbo) {
-        gl.glBindBufferBase(GL4.GL_SHADER_STORAGE_BUFFER, location, ssbo.getId());
+    public void bindShaderStorageBuffer(int location, BufferObject bo) {
+        gl.glBindBufferBase(GL4.GL_SHADER_STORAGE_BUFFER, location, bo.getId());
     }
 
     @Override

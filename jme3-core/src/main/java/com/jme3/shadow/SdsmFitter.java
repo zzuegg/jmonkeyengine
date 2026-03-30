@@ -40,9 +40,12 @@ import com.jme3.renderer.TextureUnitException;
 import com.jme3.renderer.opengl.ComputeShader;
 import com.jme3.renderer.opengl.GL4;
 import com.jme3.renderer.opengl.GLFence;
-import com.jme3.renderer.opengl.ShaderStorageBufferObject;
+import com.jme3.shader.bufferobject.BufferObject;
 import com.jme3.texture.Texture;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -222,15 +225,17 @@ public class SdsmFitter {
      * Internal holder for in-flight fit operations.
      */
     private class SdsmResultHolder {
-        ShaderStorageBufferObject minMaxDepthSsbo;
-        ShaderStorageBufferObject fitFrustumSsbo;
+        BufferObject minMaxDepthSsbo;
+        BufferObject fitFrustumSsbo;
         FitParameters parameters;
         GLFence fence;
 
         SdsmResultHolder() {
-            this.minMaxDepthSsbo = new ShaderStorageBufferObject(gl4);
+            this.minMaxDepthSsbo = new BufferObject();
+            this.minMaxDepthSsbo.setBufferType(BufferObject.BufferType.ShaderStorageBuffer);
             renderer.registerNativeObject(this.minMaxDepthSsbo);
-            this.fitFrustumSsbo = new ShaderStorageBufferObject(gl4);
+            this.fitFrustumSsbo = new BufferObject();
+            this.fitFrustumSsbo.setBufferType(BufferObject.BufferType.ShaderStorageBuffer);
             renderer.registerNativeObject(this.fitFrustumSsbo);
         }
 
@@ -256,7 +261,10 @@ public class SdsmFitter {
 
         private SplitFit extractFit() {
             if(fitFrustumSsbo.isUpdateNeeded()){ return null; }
-            int[] uintFit = fitFrustumSsbo.read(32);
+            renderer.readBufferObjectData(fitFrustumSsbo);
+            IntBuffer intBuf = fitFrustumSsbo.getData().order(ByteOrder.nativeOrder()).asIntBuffer();
+            int[] uintFit = new int[32];
+            intBuf.get(uintFit);
             float[] fitResult = new float[32];
             for(int i=0;i<fitResult.length;i++) {
                 fitResult[i] = uintFlip(uintFit[i]);
@@ -351,7 +359,7 @@ public class SdsmFitter {
         }
 
         // Initialize SSBOs
-        holder.minMaxDepthSsbo.initialize(new int[]{-1, 0}); // max uint, 0
+        holder.minMaxDepthSsbo.setData(intsToByteBuffer(new int[]{-1, 0}));
 
         // Pass 1: Reduce depth to find min/max
         depthReduceShader.makeActive();
@@ -365,7 +373,7 @@ public class SdsmFitter {
         gl4.glMemoryBarrier(GL4.GL_SHADER_STORAGE_BARRIER_BIT);
 
         // Pass 2: Fit cascade frustums
-        holder.fitFrustumSsbo.initialize(FIT_FRUSTUM_INIT);
+        holder.fitFrustumSsbo.setData(intsToByteBuffer(FIT_FRUSTUM_INIT));
 
         fitFrustumsShader.makeActive();
         try {
@@ -484,5 +492,11 @@ public class SdsmFitter {
 
     public void setMaxFrameLag(int maxFrameLag) {
         this.maxFrameLag = maxFrameLag;
+    }
+
+    private static ByteBuffer intsToByteBuffer(int[] data) {
+        ByteBuffer buf = ByteBuffer.allocateDirect(data.length * 4).order(ByteOrder.nativeOrder());
+        buf.asIntBuffer().put(data);
+        return buf;
     }
 }

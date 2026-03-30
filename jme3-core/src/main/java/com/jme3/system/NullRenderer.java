@@ -324,6 +324,11 @@ public class NullRenderer implements Renderer {
     }
 
     @Override
+    public void readBufferObjectData(BufferObject bo) {
+
+    }
+
+    @Override
     public void deleteFence(GLFence fence) {
 
     }

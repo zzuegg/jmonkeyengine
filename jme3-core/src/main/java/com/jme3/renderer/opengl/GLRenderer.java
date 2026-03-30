@@ -3501,6 +3501,28 @@ public final class GLRenderer implements Renderer {
     }
 
     @Override
+    public void readBufferObjectData(BufferObject bo) {
+        int target;
+        switch (bo.getBufferType()) {
+            case ShaderStorageBuffer:
+                target = GL4.GL_SHADER_STORAGE_BUFFER;
+                break;
+            case DrawIndirectBuffer:
+                target = GL4.GL_DRAW_INDIRECT_BUFFER;
+                break;
+            case ParameterBuffer:
+                target = GL4.GL_PARAMETER_BUFFER;
+                break;
+            default:
+                throw new IllegalArgumentException("Unsupported buffer type for read-back: " + bo.getBufferType());
+        }
+        gl.glBindBuffer(target, bo.getId());
+        ByteBuffer buf = bo.getData();
+        gl.glGetBufferSubData(target, 0, buf);
+        gl.glBindBuffer(target, 0);
+    }
+
+    @Override
     public void updateUniformBufferObjectData(BufferObject bo) {
         if (!caps.contains(Caps.UniformBufferObject)) throw new IllegalArgumentException("The current video hardware doesn't support uniform buffer objects");
         updateBufferData(GL4.GL_UNIFORM_BUFFER, bo);
