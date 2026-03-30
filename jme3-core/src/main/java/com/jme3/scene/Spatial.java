@@ -57,6 +57,7 @@ import com.jme3.util.clone.IdentityCloneFunction;
 import com.jme3.util.clone.JmeCloneable;
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
 
 /**
@@ -72,6 +73,14 @@ import java.util.logging.Logger;
 public abstract class Spatial implements Savable, Cloneable, Collidable,
         CloneableSmartAsset, JmeCloneable, HasLocalTransform {
     private static final Logger logger = Logger.getLogger(Spatial.class.getName());
+
+    /**
+     * Global monotonically-increasing counter used to generate unique scene
+     * graph change IDs.  Every time any geometric state changes in any
+     * {@code Spatial}, this counter is incremented and the new value is
+     * recorded on the modified spatial and propagated up to all its ancestors.
+     */
+    private static final AtomicLong nextGeomChangeId = new AtomicLong(1L);
 
     /**
      * Specifies how frustum culling should be handled by
@@ -173,6 +182,21 @@ public abstract class Spatial implements Savable, Cloneable, Collidable,
     protected transient int refreshFlags = 0;
 
     /**
+     * Monotonically-increasing ID of the last geometric change in this
+     * spatial's subtree.  Updated whenever any geometric state (transform,
+     * bounding volume, lights, or material-parameter overrides) changes in
+     * this spatial or any of its descendants, and propagated upward so that
+     * every ancestor also reflects the change.
+     *
+     * <p>Callers can snapshot this value before a frame and compare it at the
+     * start of the next frame to decide whether any geometry has changed and
+     * whether culling (or other per-frame work) can safely be skipped.
+     *
+     * @see #getLastGeomChangeId()
+     */
+    protected transient long lastGeomChangeId;
+
+    /**
      * Set to true if a subclass requires updateLogicalState() even
      * if it doesn't have any controls.  Defaults to true thus implementing
      * the legacy behavior for any subclasses not specifically turning it
@@ -212,6 +236,8 @@ public abstract class Spatial implements Savable, Cloneable, Collidable,
         localOverrides = new SafeArrayList<>(MatParamOverride.class);
         worldOverrides = new SafeArrayList<>(MatParamOverride.class);
         refreshFlags |= RF_BOUND;
+        // A freshly created Spatial is itself a change to the scene graph.
+        lastGeomChangeId = nextGeomChangeId.getAndIncrement();
     }
 
     @Override
@@ -286,6 +312,7 @@ public abstract class Spatial implements Savable, Cloneable, Collidable,
 
     protected void setLightListRefresh() {
         assert SceneGraphThreadWarden.assertOnCorrectThread(this);
+        incrementGeomChangeId();
         refreshFlags |= RF_LIGHTLIST;
         // Make sure next updateGeometricState() visits this branch
         // to update lights.
@@ -303,6 +330,7 @@ public abstract class Spatial implements Savable, Cloneable, Collidable,
 
     protected void setMatParamOverrideRefresh() {
         assert SceneGraphThreadWarden.assertOnCorrectThread(this);
+        incrementGeomChangeId();
         refreshFlags |= RF_MATPARAM_OVERRIDE;
         Spatial p = parent;
         while (p != null) {
@@ -321,6 +349,7 @@ public abstract class Spatial implements Savable, Cloneable, Collidable,
      */
     protected void setBoundRefresh() {
         assert SceneGraphThreadWarden.assertOnCorrectThread(this);
+        incrementGeomChangeId();
         refreshFlags |= RF_BOUND;
 
         Spatial p = parent;
@@ -351,6 +380,60 @@ public abstract class Spatial implements Savable, Cloneable, Collidable,
         if (lights) {
             setLightListRefresh();
         }
+    }
+
+    /**
+     * Increments the global scene-graph change counter, stores the resulting
+     * ID in {@link #lastGeomChangeId} for this spatial, and propagates it
+     * upward to every ancestor so that any node in the tree can cheaply
+     * determine whether anything beneath it has changed.
+     *
+     * <p>Called internally by {@link #setBoundRefresh()},
+     * {@link #setLightListRefresh()}, and
+     * {@link #setMatParamOverrideRefresh()}.  Because
+     * {@link #setTransformRefresh()} always delegates to
+     * {@link #setBoundRefresh()}, transform changes are covered automatically.
+     */
+    private void incrementGeomChangeId() {
+        long id = nextGeomChangeId.getAndIncrement();
+        lastGeomChangeId = id;
+        Spatial p = parent;
+        while (p != null) {
+            p.lastGeomChangeId = id;
+            p = p.parent;
+        }
+    }
+
+    /**
+     * Returns the last geometric change ID for this spatial's subtree.
+     *
+     * <p>This ID is a monotonically increasing value that is updated every
+     * time any geometric state (transform, bounding volume, lights, or
+     * material-parameter overrides) changes in this spatial or any of its
+     * descendants.  Because the ID is also propagated upward to all
+     * ancestors, comparing the value on a parent node is sufficient to
+     * determine whether <em>anything</em> in its entire sub-tree has
+     * changed.
+     *
+     * <p>Typical usage in a render loop:
+     * <pre>{@code
+     * private long lastKnownChangeId = -1;
+     *
+     * void update() {
+     *     long currentId = rootNode.getLastGeomChangeId();
+     *     if (currentId != lastKnownChangeId) {
+     *         // Something changed – perform full culling / update.
+     *         doFullCullingPass();
+     *         lastKnownChangeId = currentId;
+     *     }
+     *     // else: nothing changed, skip culling entirely.
+     * }
+     * }</pre>
+     *
+     * @return the last geometric change ID for this spatial's subtree
+     */
+    public long getLastGeomChangeId() {
+        return lastGeomChangeId;
     }
 
     /**
