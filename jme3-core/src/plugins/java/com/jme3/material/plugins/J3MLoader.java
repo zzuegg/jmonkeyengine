@@ -34,6 +34,7 @@ package com.jme3.material.plugins;
 import com.jme3.asset.*;
 import com.jme3.material.*;
 import com.jme3.material.RenderState.BlendEquation;
+import com.jme3.renderer.indirect.DrawDataLayout;
 import com.jme3.material.RenderState.BlendMode;
 import com.jme3.material.RenderState.FaceCullMode;
 import com.jme3.material.TechniqueDef.LightMode;
@@ -442,6 +443,28 @@ public class J3MLoader implements AssetLoader {
         }
     }
 
+    private void readDrawData(List<Statement> drawDataStatements) {
+        DrawDataLayout.Builder builder = new DrawDataLayout.Builder();
+        for (Statement statement : drawDataStatements) {
+            String fieldName = statement.getLine().trim();
+            if (fieldName.isEmpty()) continue;
+
+            if (fieldName.equals("WorldMatrix")) {
+                builder.addWorldMatrix();
+            } else {
+                // Look up the material parameter to get its type
+                MatParam param = materialDef.getMaterialParam(fieldName);
+                if (param == null) {
+                    throw new AssetLoadException("DrawData field '" + fieldName
+                            + "' does not match any MaterialParameter in "
+                            + materialDef.getName());
+                }
+                builder.addField(fieldName, param.getVarType());
+            }
+        }
+        materialDef.setDrawDataLayout(builder.build());
+    }
+
     private void readExtendingMaterialParams(List<Statement> paramsList) throws IOException{
         for (Statement statement : paramsList){
             readValueParam(statement.getLine());
@@ -822,6 +845,8 @@ public class J3MLoader implements AssetLoader {
                     readTechnique(statement);
                 } else if (statType.equals("MaterialParameters")) {
                     readMaterialParams(statement.getContents());
+                } else if (statType.equals("DrawData")) {
+                    readDrawData(statement.getContents());
                 } else {
                     throw new MatParseException("Expected material statement, got '" + statType + "'", statement);
                 }

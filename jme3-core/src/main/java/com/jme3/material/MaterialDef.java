@@ -32,6 +32,7 @@
 package com.jme3.material;
 
 import com.jme3.asset.AssetManager;
+import com.jme3.renderer.indirect.DrawDataLayout;
 import com.jme3.shader.VarType;
 import com.jme3.texture.image.ColorSpace;
 
@@ -55,6 +56,7 @@ public class MaterialDef{
 
     private Map<String, List<TechniqueDef>> techniques;
     private Map<String, MatParam> matParams;
+    private DrawDataLayout drawDataLayout;
 
     /**
      * Serialization only. Do not use.
@@ -159,6 +161,25 @@ public class MaterialDef{
      */
     public Collection<MatParam> getMaterialParams(){
         return matParams.values();
+    }
+
+    /**
+     * Returns the DrawData layout declared in this material definition,
+     * or null if no DrawData block was declared.
+     *
+     * @return the DrawData layout, or null
+     */
+    public DrawDataLayout getDrawDataLayout() {
+        return drawDataLayout;
+    }
+
+    /**
+     * Sets the DrawData layout for this material definition.
+     *
+     * @param layout the computed DrawData layout
+     */
+    public void setDrawDataLayout(DrawDataLayout layout) {
+        this.drawDataLayout = layout;
     }
 
     /**

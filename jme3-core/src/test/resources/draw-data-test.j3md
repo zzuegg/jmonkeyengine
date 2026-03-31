@@ -1,0 +1,20 @@
+MaterialDef DrawDataTest {
+
+    MaterialParameters {
+        Color BaseColor : 1.0 1.0 1.0 1.0
+        Float Roughness : 0.5
+        Texture2D BaseColorMap
+    }
+
+    DrawData {
+        WorldMatrix
+        BaseColor
+        Roughness
+        BaseColorMap
+    }
+
+    Technique {
+        VertexShader GLSL460 : Common/MatDefs/Misc/Unshaded.vert
+        FragmentShader GLSL460 : Common/MatDefs/Misc/Unshaded.frag
+    }
+}
