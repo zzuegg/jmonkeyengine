@@ -3671,7 +3671,7 @@ public final class GLRenderer implements Renderer {
             gl4.glDrawArraysIndirect(mode, byteOffset);
         }
 
-        statistics.onMeshDrawn(mesh, 0);
+        statistics.onMeshDrawnIndirect(mesh, 1);
         clearVertexAttribs();
     }
 
@@ -3697,9 +3697,7 @@ public final class GLRenderer implements Renderer {
             gl4.glMultiDrawArraysIndirect(mode, byteOffset, drawCount, 0);
         }
 
-        // Note: we pass count=1 because the per-draw triangle counts are
-        // defined in the indirect command buffer, not derivable from the mesh.
-        statistics.onMeshDrawn(mesh, 0);
+        statistics.onMeshDrawnIndirect(mesh, drawCount);
         clearVertexAttribs();
     }
 
@@ -3731,8 +3729,7 @@ public final class GLRenderer implements Renderer {
             gl4.glMultiDrawArraysIndirectCount(mode, byteOffset, 0, maxDrawCount, 0);
         }
 
-        // Actual draw count is GPU-determined; use 1 to avoid misleading stats.
-        statistics.onMeshDrawn(mesh, 0);
+        statistics.onMeshDrawnIndirect(mesh, maxDrawCount);
         clearVertexAttribs();
     }
 
