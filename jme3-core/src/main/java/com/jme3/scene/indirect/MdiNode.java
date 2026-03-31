@@ -33,6 +33,7 @@ package com.jme3.scene.indirect;
 
 import com.jme3.material.MatParam;
 import com.jme3.material.Material;
+import com.jme3.material.MaterialDef;
 import com.jme3.math.Matrix4f;
 import com.jme3.renderer.indirect.*;
 import com.jme3.renderer.queue.RenderQueue;
@@ -86,8 +87,9 @@ public class MdiNode extends GeometryGroupNode {
     /** Maps each child geometry to its batch. */
     private final Map<Geometry, MdiBatch> batchByGeom = new HashMap<>();
 
-    /** Maps DrawDataLayout to batch. Geometries with same layout share a batch. */
-    private final Map<DrawDataLayout, MdiBatch> batchByLayout = new HashMap<>();
+    /** Maps MaterialDef to batch. Geometries with same matdef share a batch
+     *  (same shader, same DrawData layout, same render state). */
+    private final Map<MaterialDef, MdiBatch> batchByMatDef = new HashMap<>();
 
     /** Set of batches needing transform re-upload. */
     private final Set<MdiBatch> dirtyBatches = new HashSet<>();
@@ -111,20 +113,20 @@ public class MdiNode extends GeometryGroupNode {
      */
     public void batch() {
         // Clear existing batches
-        for (MdiBatch batch : batchByLayout.values()) {
+        for (MdiBatch batch : batchByMatDef.values()) {
             if (batch.mdiGeometry != null) {
                 detachChild(batch.mdiGeometry);
             }
         }
         batchByGeom.clear();
-        batchByLayout.clear();
+        batchByMatDef.clear();
         dirtyBatches.clear();
 
         // Collect geometries recursively
         collectGeometries(this);
 
         // Build each batch
-        for (MdiBatch batch : batchByLayout.values()) {
+        for (MdiBatch batch : batchByMatDef.values()) {
             buildBatch(batch);
         }
 
@@ -154,16 +156,17 @@ public class MdiNode extends GeometryGroupNode {
             return;
         }
 
-        DrawDataLayout layout = material.getMaterialDef().getDrawDataLayout();
+        MaterialDef matDef = material.getMaterialDef();
+        DrawDataLayout layout = matDef.getDrawDataLayout();
         if (layout == null) {
             logger.log(Level.WARNING, "Material on {0} has no DrawData block, skipping MDI batching", geom.getName());
             return;
         }
 
-        MdiBatch batch = batchByLayout.get(layout);
+        MdiBatch batch = batchByMatDef.get(matDef);
         if (batch == null) {
             batch = new MdiBatch(layout, material);
-            batchByLayout.put(layout, batch);
+            batchByMatDef.put(matDef, batch);
         }
 
         batch.geometries.add(geom);
@@ -240,7 +243,7 @@ public class MdiNode extends GeometryGroupNode {
 
         // Always mark all batches dirty so transforms stay up to date.
         // A more optimized version could track per-geometry dirtiness.
-        for (MdiBatch batch : batchByLayout.values()) {
+        for (MdiBatch batch : batchByMatDef.values()) {
             updateBatchTransforms(batch);
         }
         dirtyBatches.clear();
@@ -313,7 +316,7 @@ public class MdiNode extends GeometryGroupNode {
     public Spatial detachChildAt(int index) {
         Spatial s = super.detachChildAt(index);
         if (s instanceof MdiGeometry) {
-            batchByLayout.values().removeIf(new java.util.function.Predicate<MdiBatch>() {
+            batchByMatDef.values().removeIf(new java.util.function.Predicate<MdiBatch>() {
                 @Override
                 public boolean test(MdiBatch b) {
                     return b.mdiGeometry == s;
