@@ -4,6 +4,7 @@ MaterialDef DrawDataTest {
         Color BaseColor : 1.0 1.0 1.0 1.0
         Float Roughness : 0.5
         Texture2D BaseColorMap
+        ShaderStorageBufferObject DrawData
     }
 
     DrawData {
