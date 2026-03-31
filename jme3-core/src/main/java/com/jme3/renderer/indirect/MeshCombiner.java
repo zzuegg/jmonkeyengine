@@ -328,26 +328,35 @@ public class MeshCombiner {
             minLodLevels = 0;
         }
 
-        // Determine common vertex attributes
-        boolean hasNormals = true;
-        boolean hasTexCoords = true;
+        // Discover the union of all vertex buffer types across all meshes
+        // (excluding Index which is handled separately).
+        java.util.LinkedHashSet<Type> allTypes = new java.util.LinkedHashSet<>();
+        java.util.Map<Type, Integer> componentCounts = new java.util.LinkedHashMap<>();
+        java.util.Map<Type, Format> formats = new java.util.LinkedHashMap<>();
         for (Entry entry : entries) {
-            if (entry.mesh.getBuffer(Type.Normal) == null) hasNormals = false;
-            if (entry.mesh.getBuffer(Type.TexCoord) == null) hasTexCoords = false;
+            for (VertexBuffer vb : entry.mesh.getBufferList()) {
+                Type t = vb.getBufferType();
+                if (t == Type.Index) continue;
+                if (!allTypes.contains(t)) {
+                    allTypes.add(t);
+                    componentCounts.put(t, vb.getNumComponents());
+                    formats.put(t, vb.getFormat());
+                }
+            }
         }
 
         boolean use32Bit = totalVerts >= 65536;
         Format indexFormat = use32Bit ? Format.UnsignedInt : Format.UnsignedShort;
 
-        // Allocate combined vertex buffers
+        // Allocate combined vertex buffers for ALL discovered types
         Mesh outMesh = new Mesh();
         outMesh.setMode(Mesh.Mode.Triangles);
 
-        FloatBuffer combinedPos = BufferUtils.createVector3Buffer(totalVerts);
-        FloatBuffer combinedNorm = hasNormals
-                ? BufferUtils.createVector3Buffer(totalVerts) : null;
-        FloatBuffer combinedTex = hasTexCoords
-                ? BufferUtils.createVector2Buffer(totalVerts) : null;
+        java.util.Map<Type, FloatBuffer> combinedBuffers = new java.util.LinkedHashMap<>();
+        for (Type t : allTypes) {
+            int components = componentCounts.get(t);
+            combinedBuffers.put(t, BufferUtils.createFloatBuffer(totalVerts * components));
+        }
 
         // Allocate base index buffer
         Buffer baseIndexData = allocIndexBuffer(totalIndices, use32Bit);
@@ -396,59 +405,50 @@ public class MeshCombiner {
                 mat.setTransform(entry.transform.getTranslation(),
                         entry.transform.getScale(),
                         entry.transform.getRotation().toRotationMatrix());
-                // Normal matrix is the inverse-transpose of the upper-left 3x3.
-                // This correctly handles non-uniform scaling.
                 normalMat = mat.clone();
                 normalMat.setTranslation(0, 0, 0);
                 normalMat.invertLocal();
                 normalMat.transposeLocal();
             }
 
-            // Copy positions
-            FloatBuffer inPos = (FloatBuffer) inMesh.getBuffer(Type.Position)
-                    .getDataReadOnly();
-            inPos.rewind();
-            for (int v = 0; v < meshVertCount; v++) {
-                float x = inPos.get(), y = inPos.get(), z = inPos.get();
-                if (mat != null) {
-                    float tx = mat.m00 * x + mat.m01 * y + mat.m02 * z + mat.m03;
-                    float ty = mat.m10 * x + mat.m11 * y + mat.m12 * z + mat.m13;
-                    float tz = mat.m20 * x + mat.m21 * y + mat.m22 * z + mat.m23;
-                    x = tx; y = ty; z = tz;
-                }
-                combinedPos.put(x).put(y).put(z);
-            }
+            // Copy all vertex buffer types — zero-fill when a mesh lacks a buffer
+            for (Type t : allTypes) {
+                int components = componentCounts.get(t);
+                FloatBuffer dest = combinedBuffers.get(t);
+                VertexBuffer srcVb = inMesh.getBuffer(t);
 
-            // Copy normals
-            if (hasNormals && inMesh.getBuffer(Type.Normal) != null) {
-                FloatBuffer inNorm = (FloatBuffer) inMesh.getBuffer(Type.Normal)
-                        .getDataReadOnly();
-                inNorm.rewind();
-                for (int v = 0; v < meshVertCount; v++) {
-                    float nx = inNorm.get(), ny = inNorm.get(), nz = inNorm.get();
-                    if (normalMat != null) {
-                        float tnx = normalMat.m00 * nx + normalMat.m01 * ny
-                                + normalMat.m02 * nz;
-                        float tny = normalMat.m10 * nx + normalMat.m11 * ny
-                                + normalMat.m12 * nz;
-                        float tnz = normalMat.m20 * nx + normalMat.m21 * ny
-                                + normalMat.m22 * nz;
-                        float len = (float) Math.sqrt(
-                                tnx * tnx + tny * tny + tnz * tnz);
-                        if (len > 0) { tnx /= len; tny /= len; tnz /= len; }
-                        nx = tnx; ny = tny; nz = tnz;
+                if (srcVb != null) {
+                    FloatBuffer src = (FloatBuffer) srcVb.getDataReadOnly();
+                    src.rewind();
+
+                    if (bakeTransforms && t == Type.Position && mat != null) {
+                        for (int v = 0; v < meshVertCount; v++) {
+                            float x = src.get(), y = src.get(), z = src.get();
+                            float tx = mat.m00 * x + mat.m01 * y + mat.m02 * z + mat.m03;
+                            float ty = mat.m10 * x + mat.m11 * y + mat.m12 * z + mat.m13;
+                            float tz = mat.m20 * x + mat.m21 * y + mat.m22 * z + mat.m23;
+                            dest.put(tx).put(ty).put(tz);
+                        }
+                    } else if (bakeTransforms && t == Type.Normal && normalMat != null) {
+                        for (int v = 0; v < meshVertCount; v++) {
+                            float nx = src.get(), ny = src.get(), nz = src.get();
+                            float tnx = normalMat.m00 * nx + normalMat.m01 * ny + normalMat.m02 * nz;
+                            float tny = normalMat.m10 * nx + normalMat.m11 * ny + normalMat.m12 * nz;
+                            float tnz = normalMat.m20 * nx + normalMat.m21 * ny + normalMat.m22 * nz;
+                            float len = (float) Math.sqrt(tnx * tnx + tny * tny + tnz * tnz);
+                            if (len > 0) { tnx /= len; tny /= len; tnz /= len; }
+                            dest.put(tnx).put(tny).put(tnz);
+                        }
+                    } else {
+                        for (int v = 0; v < meshVertCount * components; v++) {
+                            dest.put(src.get());
+                        }
                     }
-                    combinedNorm.put(nx).put(ny).put(nz);
-                }
-            }
-
-            // Copy texcoords (never transformed)
-            if (hasTexCoords && inMesh.getBuffer(Type.TexCoord) != null) {
-                FloatBuffer inTex = (FloatBuffer) inMesh.getBuffer(Type.TexCoord)
-                        .getDataReadOnly();
-                inTex.rewind();
-                for (int v = 0; v < meshVertCount; v++) {
-                    combinedTex.put(inTex.get()).put(inTex.get());
+                } else {
+                    // Zero-fill for meshes missing this buffer
+                    for (int v = 0; v < meshVertCount * components; v++) {
+                        dest.put(0f);
+                    }
                 }
             }
 
@@ -469,17 +469,12 @@ public class MeshCombiner {
         }
 
         // Flip all buffers and assign to output mesh
-        combinedPos.flip();
-        if (combinedNorm != null) combinedNorm.flip();
-        if (combinedTex != null) combinedTex.flip();
         baseIndexData.flip();
 
-        outMesh.setBuffer(Type.Position, 3, combinedPos);
-        if (combinedNorm != null) {
-            outMesh.setBuffer(Type.Normal, 3, combinedNorm);
-        }
-        if (combinedTex != null) {
-            outMesh.setBuffer(Type.TexCoord, 2, combinedTex);
+        for (Type t : allTypes) {
+            FloatBuffer buf = combinedBuffers.get(t);
+            buf.flip();
+            outMesh.setBuffer(t, componentCounts.get(t), buf);
         }
 
         VertexBuffer baseIndexVb = new VertexBuffer(Type.Index);
