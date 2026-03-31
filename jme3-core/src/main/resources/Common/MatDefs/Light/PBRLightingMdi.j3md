@@ -1,0 +1,45 @@
+MaterialDef PBRLightingMdi {
+
+    MaterialParameters {
+        Color BaseColor : 1.0 1.0 1.0 1.0
+        Float Metallic : 0.0
+        Float Roughness : 0.5
+        Color Emissive : 0.0 0.0 0.0 0.0
+        Float EmissiveIntensity : 1.0
+        Texture2D BaseColorMap
+        Texture2D NormalMap
+        Texture2D MetallicRoughnessMap
+        Texture2D EmissiveMap
+        ShaderStorageBufferObject DrawData
+    }
+
+    DrawData {
+        WorldMatrix
+        BaseColor
+        Metallic
+        Roughness
+        Emissive
+        EmissiveIntensity
+        BaseColorMap
+        NormalMap
+        MetallicRoughnessMap
+        EmissiveMap
+    }
+
+    Technique {
+        LightMode SinglePass
+
+        VertexShader GLSL460 : Common/MatDefs/Light/PBRLightingMdi.vert
+        FragmentShader GLSL460 : Common/MatDefs/Light/PBRLightingMdi.frag
+
+        WorldParameters {
+            ViewProjectionMatrix
+            ViewMatrix
+            CameraPosition
+        }
+
+        Defines {
+            NB_LIGHTS : NbLights
+        }
+    }
+}
