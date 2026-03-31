@@ -12,7 +12,7 @@ MaterialDef UnshadedMdi {
         ColorMap
     }
 
-    Technique {
+    Technique Mdi {
         VertexShader GLSL460 : Common/MatDefs/Misc/UnshadedMdi.vert
         FragmentShader GLSL460 : Common/MatDefs/Misc/UnshadedMdi.frag
 

@@ -92,7 +92,7 @@ public class TestPBRLightingMdiNode extends ScreenshotTestBase {
 
                 // Shiny red metallic sphere (left)
                 Material mat1 = new Material(app.getAssetManager(),
-                        "Common/MatDefs/Light/PBRLightingMdi.j3md");
+                        "Common/MatDefs/Light/PBRLighting.j3md");
                 mat1.setColor("BaseColor", new ColorRGBA(0.9f, 0.1f, 0.1f, 1.0f));
                 mat1.setFloat("Metallic", 1.0f);
                 mat1.setFloat("Roughness", 0.1f);
@@ -105,7 +105,7 @@ public class TestPBRLightingMdiNode extends ScreenshotTestBase {
 
                 // Rough green dielectric box (center)
                 Material mat2 = new Material(app.getAssetManager(),
-                        "Common/MatDefs/Light/PBRLightingMdi.j3md");
+                        "Common/MatDefs/Light/PBRLighting.j3md");
                 mat2.setColor("BaseColor", new ColorRGBA(0.1f, 0.8f, 0.1f, 1.0f));
                 mat2.setFloat("Metallic", 0.0f);
                 mat2.setFloat("Roughness", 0.9f);
@@ -117,7 +117,7 @@ public class TestPBRLightingMdiNode extends ScreenshotTestBase {
 
                 // Gold metallic monkey head (right)
                 Material mat3 = new Material(app.getAssetManager(),
-                        "Common/MatDefs/Light/PBRLightingMdi.j3md");
+                        "Common/MatDefs/Light/PBRLighting.j3md");
                 mat3.setColor("BaseColor", new ColorRGBA(1.0f, 0.76f, 0.33f, 1.0f));
                 mat3.setFloat("Metallic", 1.0f);
                 mat3.setFloat("Roughness", 0.3f);
@@ -139,7 +139,7 @@ public class TestPBRLightingMdiNode extends ScreenshotTestBase {
 
                 // Blue emissive sphere (top)
                 Material mat4 = new Material(app.getAssetManager(),
-                        "Common/MatDefs/Light/PBRLightingMdi.j3md");
+                        "Common/MatDefs/Light/PBRLighting.j3md");
                 mat4.setColor("BaseColor", new ColorRGBA(0.1f, 0.1f, 0.3f, 1.0f));
                 mat4.setFloat("Metallic", 0.0f);
                 mat4.setFloat("Roughness", 0.5f);

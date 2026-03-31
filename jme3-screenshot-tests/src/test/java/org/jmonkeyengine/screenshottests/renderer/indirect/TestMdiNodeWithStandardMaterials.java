@@ -34,11 +34,15 @@ package org.jmonkeyengine.screenshottests.renderer.indirect;
 import com.jme3.app.Application;
 import com.jme3.app.SimpleApplication;
 import com.jme3.app.state.BaseAppState;
+import com.jme3.light.AmbientLight;
+import com.jme3.light.DirectionalLight;
 import com.jme3.material.Material;
 import com.jme3.math.ColorRGBA;
 import com.jme3.math.Vector3f;
 import com.jme3.renderer.Caps;
 import com.jme3.scene.Geometry;
+import com.jme3.scene.Mesh;
+import com.jme3.scene.Spatial;
 import com.jme3.scene.indirect.MdiNode;
 import com.jme3.scene.shape.Box;
 import com.jme3.scene.shape.Sphere;
@@ -48,16 +52,16 @@ import org.junit.jupiter.api.Test;
 import java.util.EnumSet;
 
 /**
- * Tests MdiNode automatic batching: attaches geometries with different meshes
- * and colors under an MdiNode, calls batch(), and verifies they render correctly
- * in a single MDI call via the normal scene graph pipeline (no SceneProcessor needed).
+ * Tests that MdiNode works with the STANDARD material definitions
+ * (Unshaded.j3md and PBRLighting.j3md) — not special MDI-only matdefs.
  * <p>
- * Requires: {@link Caps#MultiDrawIndirect}, {@link Caps#ShaderStorageBufferObject}.
+ * The existing matdefs now include a DrawData block and an "Mdi" technique.
+ * The rendering pipeline auto-selects the Mdi technique for MdiGeometry.
  */
-public class TestMdiNode extends ScreenshotTestBase {
+public class TestMdiNodeWithStandardMaterials extends ScreenshotTestBase {
 
     @Test
-    public void testMdiNodeBatching() {
+    public void testUnshadedMdi() {
         screenshotTest(new BaseAppState() {
             @Override
             protected void initialize(Application app) {
@@ -72,10 +76,10 @@ public class TestMdiNode extends ScreenshotTestBase {
                 app.getCamera().setLocation(new Vector3f(0, 0, 8));
                 app.getCamera().lookAt(Vector3f.ZERO, Vector3f.UNIT_Y);
 
-                MdiNode mdiNode = new MdiNode("testMdi");
+                MdiNode mdiNode = new MdiNode("unshadedMdi");
                 simpleApp.getRootNode().attachChild(mdiNode);
 
-                // Red box on the left
+                // Standard Unshaded.j3md — not UnshadedMdi.j3md!
                 Material mat1 = new Material(app.getAssetManager(),
                         "Common/MatDefs/Misc/Unshaded.j3md");
                 mat1.setColor("Color", ColorRGBA.Red);
@@ -85,7 +89,6 @@ public class TestMdiNode extends ScreenshotTestBase {
                 box.setLocalTranslation(-2, 0, 0);
                 mdiNode.attachChild(box);
 
-                // Green sphere on the right
                 Material mat2 = new Material(app.getAssetManager(),
                         "Common/MatDefs/Misc/Unshaded.j3md");
                 mat2.setColor("Color", ColorRGBA.Green);
@@ -95,17 +98,79 @@ public class TestMdiNode extends ScreenshotTestBase {
                 sphere.setLocalTranslation(2, 0, 0);
                 mdiNode.attachChild(sphere);
 
-                // Blue box in the center
-                Material mat3 = new Material(app.getAssetManager(),
-                        "Common/MatDefs/Misc/Unshaded.j3md");
-                mat3.setColor("Color", ColorRGBA.Blue);
+                mdiNode.batch();
+            }
 
-                Geometry box2 = new Geometry("box2", new Box(0.5f, 0.5f, 0.5f));
-                box2.setMaterial(mat3);
-                box2.setLocalTranslation(0, 0, 0);
-                mdiNode.attachChild(box2);
+            @Override protected void cleanup(Application app) {}
+            @Override protected void onEnable() {}
+            @Override protected void onDisable() {}
+        })
+        .setFramesToTakeScreenshotsOn(3)
+        .run();
+    }
 
-                // Batch — combines all three into one MDI call
+    @Test
+    public void testPBRLightingMdi() {
+        screenshotTest(new BaseAppState() {
+            @Override
+            protected void initialize(Application app) {
+                SimpleApplication simpleApp = (SimpleApplication) app;
+                EnumSet<Caps> caps = app.getRenderer().getCaps();
+
+                if (!caps.contains(Caps.MultiDrawIndirect)
+                        || !caps.contains(Caps.ShaderStorageBufferObject)) {
+                    return;
+                }
+
+                app.getCamera().setLocation(new Vector3f(0, 0, 10));
+                app.getCamera().lookAt(Vector3f.ZERO, Vector3f.UNIT_Y);
+
+                DirectionalLight sun = new DirectionalLight();
+                sun.setDirection(new Vector3f(-1, -2, -3).normalizeLocal());
+                sun.setColor(ColorRGBA.White.mult(1.5f));
+                simpleApp.getRootNode().addLight(sun);
+
+                AmbientLight ambient = new AmbientLight();
+                ambient.setColor(new ColorRGBA(0.2f, 0.2f, 0.2f, 1.0f));
+                simpleApp.getRootNode().addLight(ambient);
+
+                MdiNode mdiNode = new MdiNode("pbrMdi");
+                simpleApp.getRootNode().attachChild(mdiNode);
+
+                // Standard PBR Lighting.j3md — not PBRLightingMdi.j3md!
+                Material mat1 = new Material(app.getAssetManager(),
+                        "Common/MatDefs/Light/PBRLighting.j3md");
+                mat1.setColor("BaseColor", new ColorRGBA(0.9f, 0.1f, 0.1f, 1.0f));
+                mat1.setFloat("Metallic", 1.0f);
+                mat1.setFloat("Roughness", 0.1f);
+
+                Geometry sphere = new Geometry("metalSphere",
+                        new Sphere(32, 32, 1.2f));
+                sphere.setMaterial(mat1);
+                sphere.setLocalTranslation(-3, 0, 0);
+                mdiNode.attachChild(sphere);
+
+                Material mat2 = new Material(app.getAssetManager(),
+                        "Common/MatDefs/Light/PBRLighting.j3md");
+                mat2.setColor("BaseColor", new ColorRGBA(1.0f, 0.76f, 0.33f, 1.0f));
+                mat2.setFloat("Metallic", 1.0f);
+                mat2.setFloat("Roughness", 0.3f);
+
+                Spatial monkeyModel = app.getAssetManager()
+                        .loadModel("Models/MonkeyHead/MonkeyHead.mesh.xml");
+                Mesh monkeyMesh;
+                if (monkeyModel instanceof Geometry) {
+                    monkeyMesh = ((Geometry) monkeyModel).getMesh();
+                } else {
+                    monkeyMesh = ((Geometry) ((com.jme3.scene.Node) monkeyModel)
+                            .getChild(0)).getMesh();
+                }
+
+                Geometry monkey = new Geometry("goldMonkey", monkeyMesh);
+                monkey.setMaterial(mat2);
+                monkey.setLocalTranslation(3, 0, 0);
+                mdiNode.attachChild(monkey);
+
                 mdiNode.batch();
             }
 

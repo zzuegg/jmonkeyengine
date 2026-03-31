@@ -22,11 +22,11 @@ public class MdiNodeTest {
 
         MdiNode mdiNode = new MdiNode("testMdi");
 
-        Material mat1 = new Material(assetManager, "draw-data-test.j3md");
-        mat1.setColor("BaseColor", ColorRGBA.Red);
+        Material mat1 = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+        mat1.setColor("Color", ColorRGBA.Red);
 
-        Material mat2 = new Material(assetManager, "draw-data-test.j3md");
-        mat2.setColor("BaseColor", ColorRGBA.Green);
+        Material mat2 = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+        mat2.setColor("Color", ColorRGBA.Green);
 
         Geometry box = new Geometry("box", new Box(1, 1, 1));
         box.setMaterial(mat1);
@@ -62,7 +62,7 @@ public class MdiNodeTest {
 
         MdiNode mdiNode = new MdiNode("testMdi");
 
-        Material mat = new Material(assetManager, "draw-data-test.j3md");
+        Material mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
 
         Geometry box = new Geometry("box", new Box(1, 1, 1));
         box.setMaterial(mat);
@@ -79,7 +79,7 @@ public class MdiNodeTest {
 
         MdiNode mdiNode = new MdiNode("testMdi");
 
-        Material mat = new Material(assetManager, "draw-data-test.j3md");
+        Material mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
 
         // Create nested structure
         Node subNode = new Node("sub");
@@ -99,12 +99,12 @@ public class MdiNodeTest {
     }
 
     @Test
-    public void testNoDrawDataSkipsGeometry() {
+    public void testStandardUnshadedWorksWithMdiNode() {
         AssetManager assetManager = TestUtil.createAssetManager();
 
         MdiNode mdiNode = new MdiNode("testMdi");
 
-        // Unshaded has no DrawData block
+        // Standard Unshaded.j3md now has a DrawData block
         Material unshadedMat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
         unshadedMat.setColor("Color", ColorRGBA.Blue);
 
@@ -114,7 +114,7 @@ public class MdiNodeTest {
 
         mdiNode.batch();
 
-        assertFalse("Geometry with no-DrawData material should not be grouped", box.isGrouped());
+        assertTrue("Standard Unshaded geometry should be grouped by MdiNode", box.isGrouped());
     }
 
     @Test
@@ -123,8 +123,8 @@ public class MdiNodeTest {
 
         MdiNode mdiNode = new MdiNode("testMdi");
 
-        Material mat = new Material(assetManager, "draw-data-test.j3md");
-        mat.setColor("BaseColor", ColorRGBA.Red);
+        Material mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+        mat.setColor("Color", ColorRGBA.Red);
 
         Geometry box = new Geometry("box", new Box(1, 1, 1));
         box.setMaterial(mat);
@@ -147,11 +147,11 @@ public class MdiNodeTest {
     @Test
     public void testDrawDataLayoutFromMatDef() {
         AssetManager assetManager = TestUtil.createAssetManager();
-        Material mat = new Material(assetManager, "draw-data-test.j3md");
+        Material mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
         DrawDataLayout layout = mat.getMaterialDef().getDrawDataLayout();
 
         assertNotNull(layout);
-        assertEquals(4, layout.getFieldCount());
+        assertEquals(3, layout.getFieldCount());
         assertTrue(layout.getField(0).isWorldMatrix());
     }
 }

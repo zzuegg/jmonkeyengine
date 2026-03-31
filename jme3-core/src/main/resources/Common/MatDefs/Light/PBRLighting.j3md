@@ -144,7 +144,7 @@ MaterialDef PBR Lighting {
         Float StaticSunIntensity
         Boolean BrightenIndoorShadows  //should be set true when shadows are enabled, in order to prevent areas with low SunExposure from being way too dark when shadows are cast
 
-         // debug the final value of the selected layer as a color output            
+         // debug the final value of the selected layer as a color output
         Int DebugValuesMode
             // Layers:
             //   0 - albedo (unshaded)
@@ -156,6 +156,22 @@ MaterialDef PBR Lighting {
             //   6 - exposure
             //   7 - alpha
             //   8 - geometryNormals
+
+        // For multi-draw indirect (MDI) rendering
+        ShaderStorageBufferObject DrawData
+    }
+
+    DrawData {
+        WorldMatrix
+        BaseColor
+        Metallic
+        Roughness
+        Emissive
+        EmissiveIntensity
+        BaseColorMap
+        NormalMap
+        MetallicRoughnessMap
+        EmissiveMap
     }
 
     Technique {
@@ -330,6 +346,23 @@ MaterialDef PBR Lighting {
             INSTANCING : UseInstancing
             NUM_MORPH_TARGETS: NumberOfMorphTargets
             NUM_TARGETS_BUFFERS: NumberOfTargetsBuffers
+        }
+    }
+
+    Technique Mdi {
+        LightMode SinglePass
+
+        VertexShader GLSL460 : Common/MatDefs/Light/PBRLightingMdi.vert
+        FragmentShader GLSL460 : Common/MatDefs/Light/PBRLightingMdi.frag
+
+        WorldParameters {
+            ViewProjectionMatrix
+            ViewMatrix
+            CameraPosition
+        }
+
+        Defines {
+            NB_LIGHTS : NbLights
         }
     }
 

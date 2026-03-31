@@ -63,6 +63,15 @@ MaterialDef Unshaded {
         
         // 1.0 indicates 100% desaturation
         Float DesaturationValue
+
+        // For multi-draw indirect (MDI) rendering
+        ShaderStorageBufferObject DrawData
+    }
+
+    DrawData {
+        WorldMatrix
+        Color
+        ColorMap
     }
 
     Technique {
@@ -205,6 +214,15 @@ MaterialDef Unshaded {
             HAS_POINTSIZE : PointSize
             NUM_MORPH_TARGETS: NumberOfMorphTargets
             NUM_TARGETS_BUFFERS: NumberOfTargetsBuffers
+        }
+    }
+
+    Technique Mdi {
+        VertexShader GLSL460 : Common/MatDefs/Misc/UnshadedMdi.vert
+        FragmentShader GLSL460 : Common/MatDefs/Misc/UnshadedMdi.frag
+
+        WorldParameters {
+            ViewProjectionMatrix
         }
     }
 }

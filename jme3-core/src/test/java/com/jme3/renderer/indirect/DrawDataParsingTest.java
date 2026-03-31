@@ -39,10 +39,12 @@ public class DrawDataParsingTest {
     }
 
     @Test
-    public void testNoDrawDataBlock() {
+    public void testUnshadedHasDrawDataBlock() {
+        // Standard Unshaded now has a DrawData block for MDI support
         AssetManager assetManager = TestUtil.createAssetManager();
         Material mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
-        assertNull(mat.getMaterialDef().getDrawDataLayout());
+        assertNotNull(mat.getMaterialDef().getDrawDataLayout());
+        assertEquals(3, mat.getMaterialDef().getDrawDataLayout().getFieldCount());
     }
 
     @Test

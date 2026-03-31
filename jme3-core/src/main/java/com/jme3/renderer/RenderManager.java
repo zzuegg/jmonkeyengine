@@ -55,6 +55,7 @@ import com.jme3.renderer.queue.RenderQueue;
 import com.jme3.renderer.queue.RenderQueue.Bucket;
 import com.jme3.renderer.queue.RenderQueue.ShadowMode;
 import com.jme3.scene.Geometry;
+import com.jme3.scene.indirect.MdiGeometry;
 import com.jme3.scene.Mesh;
 import com.jme3.scene.Node;
 import com.jme3.scene.Spatial;
@@ -792,6 +793,19 @@ public class RenderManager {
 
         Material material = geom.getMaterial();
 
+        // Auto-select "Mdi" technique for MdiGeometry when no technique is forced.
+        // This lets existing matdefs (Unshaded, PBRLighting) work with MdiNode
+        // by adding an "Mdi" technique alongside their default technique.
+        if (geom instanceof MdiGeometry && forcedTechnique == null) {
+            MaterialDef matDef = material.getMaterialDef();
+            if (matDef.getTechniqueDefs("Mdi") != null) {
+                material.selectTechnique("Mdi", this);
+                material.render(geom, lightList, this);
+                this.renderer.popDebugGroup();
+                return;
+            }
+        }
+
         // If forcedTechnique exists, we try to force it for the render.
         // If it does not exist in the mat def, we check for forcedMaterial and render the geom if not null.
         // Otherwise, the geometry is not rendered.
@@ -832,6 +846,7 @@ public class RenderManager {
         } else {
             material.render(geom, lightList, this);
         }
+
         this.renderer.popDebugGroup();
     }
 

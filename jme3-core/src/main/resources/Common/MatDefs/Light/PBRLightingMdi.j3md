@@ -26,7 +26,7 @@ MaterialDef PBRLightingMdi {
         EmissiveMap
     }
 
-    Technique {
+    Technique Mdi {
         LightMode SinglePass
 
         VertexShader GLSL460 : Common/MatDefs/Light/PBRLightingMdi.vert
