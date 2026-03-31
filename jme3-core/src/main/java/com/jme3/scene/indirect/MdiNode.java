@@ -35,9 +35,12 @@ import com.jme3.material.MatParam;
 import com.jme3.material.Material;
 import com.jme3.material.MaterialDef;
 import com.jme3.math.Matrix4f;
+import com.jme3.renderer.Caps;
+import com.jme3.renderer.Renderer;
 import com.jme3.renderer.indirect.*;
 import com.jme3.renderer.queue.RenderQueue;
 import com.jme3.scene.*;
+import com.jme3.shader.VarType;
 import com.jme3.shader.bufferobject.BufferObject;
 import com.jme3.texture.Texture;
 import com.jme3.util.BufferUtils;
@@ -97,6 +100,9 @@ public class MdiNode extends GeometryGroupNode {
     /** Whether batch() has been called. */
     private boolean batched = false;
 
+    /** Whether texture handles have been resolved (requires GPU context). */
+    private boolean texturesResolved = false;
+
     protected MdiNode() {
         super();
     }
@@ -131,6 +137,7 @@ public class MdiNode extends GeometryGroupNode {
         }
 
         batched = true;
+        texturesResolved = false;
     }
 
     private void collectGeometries(Spatial spatial) {
@@ -237,16 +244,71 @@ public class MdiNode extends GeometryGroupNode {
 
     /**
      * Called by MdiNodeControl each render frame. Updates dirty batch SSBOs.
+     *
+     * @param renderer the renderer, used to preload textures for bindless handles
      */
-    void updateBatches() {
+    void updateBatches(Renderer renderer) {
         if (!batched) return;
 
-        // Always mark all batches dirty so transforms stay up to date.
-        // A more optimized version could track per-geometry dirtiness.
+        // On first render call, preload textures to create bindless handles
+        // and re-serialize the full DrawData with real handles.
+        if (!texturesResolved) {
+            resolveTextures(renderer);
+            texturesResolved = true;
+        }
+
+        // Update transforms each frame.
         for (MdiBatch batch : batchByMatDef.values()) {
             updateBatchTransforms(batch);
         }
         dirtyBatches.clear();
+    }
+
+    /**
+     * Enables bindless textures if needed, preloads all textures referenced
+     * by DrawData fields, then re-serializes all batches with real handles.
+     */
+    private void resolveTextures(Renderer renderer) {
+        // Check if any DrawData layout has texture fields
+        boolean hasTextures = false;
+        for (MdiBatch batch : batchByMatDef.values()) {
+            for (DrawDataField field : batch.layout.getFields()) {
+                if (field.getVarType().isTextureType()) {
+                    hasTextures = true;
+                    break;
+                }
+            }
+            if (hasTextures) break;
+        }
+
+        if (!hasTextures) return;
+
+        // Enable bindless textures
+        if (renderer.getCaps().contains(Caps.BindlessTexture)) {
+            renderer.setBindlessTextureEnabled(true);
+        } else {
+            logger.log(Level.WARNING,
+                    "DrawData has texture fields but GPU does not support bindless textures");
+            return;
+        }
+
+        // Preload all textures and re-serialize batches
+        for (MdiBatch batch : batchByMatDef.values()) {
+            // Preload textures from all child geometries
+            for (Geometry geom : batch.geometries) {
+                Material mat = geom.getMaterial();
+                for (DrawDataField field : batch.layout.getFields()) {
+                    if (field.getVarType().isTextureType()) {
+                        MatParam param = mat.getParam(field.getName());
+                        if (param != null && param.getValue() instanceof Texture) {
+                            renderer.preloadTexture((Texture) param.getValue());
+                        }
+                    }
+                }
+            }
+            // Re-serialize with real bindless handles
+            serializeBatch(batch);
+        }
     }
 
     private void updateBatchTransforms(MdiBatch batch) {

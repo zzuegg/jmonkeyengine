@@ -67,7 +67,7 @@ class MdiNodeControl implements Control, JmeCloneable {
 
     @Override
     public void render(RenderManager rm, ViewPort vp) {
-        node.updateBatches();
+        node.updateBatches(rm.getRenderer());
     }
 
     @Deprecated
