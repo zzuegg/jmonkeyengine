@@ -55,7 +55,6 @@ import com.jme3.renderer.queue.RenderQueue;
 import com.jme3.renderer.queue.RenderQueue.Bucket;
 import com.jme3.renderer.queue.RenderQueue.ShadowMode;
 import com.jme3.scene.Geometry;
-import com.jme3.scene.indirect.MdiGeometry;
 import com.jme3.scene.Mesh;
 import com.jme3.scene.Node;
 import com.jme3.scene.Spatial;
@@ -793,25 +792,15 @@ public class RenderManager {
 
         Material material = geom.getMaterial();
 
-        // Auto-select "Mdi" technique for MdiGeometry when no technique is forced.
-        // This lets existing matdefs (Unshaded, PBRLighting) work with MdiNode
-        // by adding an "Mdi" technique alongside their default technique.
-        if (geom instanceof MdiGeometry && forcedTechnique == null) {
-            MaterialDef matDef = material.getMaterialDef();
-            if (matDef.getTechniqueDefs("Mdi") != null) {
-                material.selectTechnique("Mdi", this);
-                material.render(geom, lightList, this);
-                this.renderer.popDebugGroup();
-                return;
-            }
-        }
-
         // If forcedTechnique exists, we try to force it for the render.
         // If it does not exist in the mat def, we check for forcedMaterial and render the geom if not null.
         // Otherwise, the geometry is not rendered.
         if (forcedTechnique != null) {
+            // Let the geometry map the technique name (e.g. MdiGeometry
+            // maps "PreShadow" to "MdiPreShadow", "Default" to "Mdi").
+            String mappedTechnique = geom.mapTechnique(forcedTechnique);
             MaterialDef matDef = material.getMaterialDef();
-            if (matDef.getTechniqueDefs(forcedTechnique) != null) {
+            if (matDef.getTechniqueDefs(mappedTechnique) != null) {
 
                 Technique activeTechnique = material.getActiveTechnique();
 
@@ -819,7 +808,7 @@ public class RenderManager {
                         ? activeTechnique.getDef().getName()
                         : TechniqueDef.DEFAULT_TECHNIQUE_NAME;
 
-                geom.getMaterial().selectTechnique(forcedTechnique, this);
+                geom.getMaterial().selectTechnique(mappedTechnique, this);
                 //saving forcedRenderState for future calls
                 RenderState tmpRs = forcedRenderState;
                 if (geom.getMaterial().getActiveTechnique().getDef().getForcedRenderState() != null) {
@@ -844,6 +833,11 @@ public class RenderManager {
             // use forced material
             forcedMaterial.render(geom, lightList, this);
         } else {
+            // Let the geometry map the default technique name.
+            String mappedDefault = geom.mapTechnique(TechniqueDef.DEFAULT_TECHNIQUE_NAME);
+            if (!mappedDefault.equals(TechniqueDef.DEFAULT_TECHNIQUE_NAME)) {
+                material.selectTechnique(mappedDefault, this);
+            }
             material.render(geom, lightList, this);
         }
 

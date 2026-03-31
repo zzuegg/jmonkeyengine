@@ -292,6 +292,20 @@ public class Geometry extends Spatial {
     }
 
     /**
+     * Maps a requested technique name to the actual technique this geometry
+     * should use. Subclasses can override to redirect technique selection
+     * (e.g., MdiGeometry maps "Default" to "Mdi").
+     * <p>
+     * The default implementation returns the requested name unchanged.
+     *
+     * @param requestedTechnique the technique name requested by the render pipeline
+     * @return the technique name to actually use
+     */
+    public String mapTechnique(String requestedTechnique) {
+        return requestedTechnique;
+    }
+
+    /**
      * @return The bounding volume of the mesh, in model space.
      */
     public BoundingVolume getModelBound() {
