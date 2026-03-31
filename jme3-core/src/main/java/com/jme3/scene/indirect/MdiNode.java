@@ -35,6 +35,8 @@ import com.jme3.material.MatParam;
 import com.jme3.material.Material;
 import com.jme3.material.MaterialDef;
 import com.jme3.math.Matrix4f;
+import com.jme3.bounding.BoundingVolume;
+import com.jme3.renderer.Camera;
 import com.jme3.renderer.Caps;
 import com.jme3.renderer.Renderer;
 import com.jme3.renderer.indirect.*;
@@ -331,6 +333,54 @@ public class MdiNode extends GeometryGroupNode {
         buf.rewind();
         batch.drawDataSsbo.setData(buf);
         batch.drawDataSsbo.setUpdateNeeded();
+    }
+
+    /**
+     * Per-draw CPU frustum culling for all batches. Sets instanceCount=0 for
+     * draws whose source geometry is outside the camera frustum, instanceCount=1
+     * for visible draws. Call this before each render pass that uses a different
+     * camera (main camera, shadow cameras, etc.).
+     *
+     * @param cam the camera to cull against
+     */
+    public void cullForCamera(Camera cam) {
+        if (!batched || cam == null) return;
+        for (MdiBatch batch : batchByMatDef.values()) {
+            cullBatch(batch, cam);
+        }
+    }
+
+    private int cullBatch(MdiBatch batch, Camera cam) {
+        ByteBuffer cmdBuf = batch.commandBuffer.getRawBuffer();
+        if (cmdBuf == null) return 0;
+
+        int stride = DrawElementsIndirectCommand.STRIDE;
+        int culled = 0;
+
+        for (int i = 0; i < batch.geometries.size(); i++) {
+            Geometry geom = batch.geometries.get(i);
+            BoundingVolume bound = geom.getWorldBound();
+
+            int visible;
+            if (bound == null) {
+                visible = 1;
+            } else {
+                cam.setPlaneState(0);
+                visible = cam.contains(bound) != Camera.FrustumIntersect.Outside ? 1 : 0;
+            }
+            if (visible == 0) culled++;
+
+            // instanceCount is the second int in DrawElementsIndirectCommand
+            cmdBuf.putInt(i * stride + 4, visible);
+        }
+
+        cam.setPlaneState(0);
+
+        cmdBuf.position(0);
+        cmdBuf.limit(batch.geometries.size() * stride);
+        batch.commandBuffer.getBufferObject().setData(cmdBuf);
+        batch.commandBuffer.getBufferObject().setUpdateNeeded();
+        return culled;
     }
 
     // --- GeometryGroupNode callbacks ---
