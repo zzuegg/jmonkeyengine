@@ -58,6 +58,7 @@ public class MdiGeometry extends Geometry {
     private static final String MDI_PREFIX = "Mdi";
 
     private IndirectCommandBuffer commandBuffer;
+    private int drawCount = -1;
 
     protected MdiGeometry() {
         super();
@@ -68,19 +69,21 @@ public class MdiGeometry extends Geometry {
         this.commandBuffer = commandBuffer;
     }
 
-    /** Returns the indirect command buffer used for MDI rendering. */
     public IndirectCommandBuffer getCommandBuffer() {
         return commandBuffer;
     }
 
-    /** Sets the indirect command buffer. */
     public void setCommandBuffer(IndirectCommandBuffer commandBuffer) {
         this.commandBuffer = commandBuffer;
     }
 
-    /** Returns the number of draw commands in the command buffer. */
     public int getDrawCount() {
+        if (drawCount >= 0) return drawCount;
         return commandBuffer != null ? commandBuffer.getCommandCount() : 0;
+    }
+
+    public void setDrawCount(int count) {
+        this.drawCount = count;
     }
 
     /**

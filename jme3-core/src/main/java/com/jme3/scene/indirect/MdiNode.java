@@ -217,6 +217,25 @@ public class MdiNode extends GeometryGroupNode {
         batch.commandBuffer = batch.combinedMesh.toCommandBuffer();
         batch.commandBuffer.update();
 
+        // Set baseInstance = geometry index for SSBO lookup via gl_BaseInstance
+        ByteBuffer raw = batch.commandBuffer.getRawBuffer();
+        int stride = DrawElementsIndirectCommand.STRIDE;
+        for (int i = 0; i < geoms.size(); i++) {
+            raw.putInt(i * stride + 16, i);
+        }
+
+        // Store a copy of the original commands for frustum culling compaction
+        int totalCmdBytes = geoms.size() * stride;
+        batch.originalCommands = BufferUtils.createByteBuffer(totalCmdBytes);
+        raw.position(0).limit(totalCmdBytes);
+        batch.originalCommands.put(raw);
+        batch.originalCommands.flip();
+
+        // Re-upload with baseInstance set
+        raw.position(0).limit(totalCmdBytes);
+        batch.commandBuffer.getBufferObject().setData(raw);
+        batch.commandBuffer.getBufferObject().setUpdateNeeded();
+
         // Allocate DrawData SSBO
         int totalBytes = geoms.size() * layout.getStride();
         batch.drawDataCpu = BufferUtils.createByteBuffer(totalBytes);
@@ -265,25 +284,27 @@ public class MdiNode extends GeometryGroupNode {
     }
 
     /**
-     * Called by MdiNodeControl each render frame. Updates dirty batch SSBOs.
+     * Called by MdiNodeControl each render frame. Updates transforms,
+     * resolves textures on first frame, and compacts command buffers
+     * to only include draws visible to the given camera.
      *
      * @param renderer the renderer, used to preload textures for bindless handles
+     * @param cam the camera for frustum culling compaction
      */
     void updateBatches(Renderer renderer) {
         if (!batched) return;
 
-        // On first render call, preload textures to create bindless handles
-        // and re-serialize the full DrawData with real handles.
         if (!texturesResolved) {
             resolveTextures(renderer);
             texturesResolved = true;
         }
 
-        // Update transforms each frame.
-        for (MdiBatch batch : batchByKey.values()) {
-            updateBatchTransforms(batch);
+        if (!dirtyBatches.isEmpty()) {
+            for (MdiBatch batch : dirtyBatches) {
+                updateBatchTransforms(batch);
+            }
+            dirtyBatches.clear();
         }
-        dirtyBatches.clear();
     }
 
     /**
@@ -353,54 +374,6 @@ public class MdiNode extends GeometryGroupNode {
         buf.rewind();
         batch.drawDataSsbo.setData(buf);
         batch.drawDataSsbo.setUpdateNeeded();
-    }
-
-    /**
-     * Per-draw CPU frustum culling for all batches. Sets instanceCount=0 for
-     * draws whose source geometry is outside the camera frustum, instanceCount=1
-     * for visible draws. Call this before each render pass that uses a different
-     * camera (main camera, shadow cameras, etc.).
-     *
-     * @param cam the camera to cull against
-     */
-    public void cullForCamera(Camera cam) {
-        if (!batched || cam == null) return;
-        for (MdiBatch batch : batchByKey.values()) {
-            cullBatch(batch, cam);
-        }
-    }
-
-    private int cullBatch(MdiBatch batch, Camera cam) {
-        ByteBuffer cmdBuf = batch.commandBuffer.getRawBuffer();
-        if (cmdBuf == null) return 0;
-
-        int stride = DrawElementsIndirectCommand.STRIDE;
-        int culled = 0;
-
-        for (int i = 0; i < batch.geometries.size(); i++) {
-            Geometry geom = batch.geometries.get(i);
-            BoundingVolume bound = geom.getWorldBound();
-
-            int visible;
-            if (bound == null) {
-                visible = 1;
-            } else {
-                cam.setPlaneState(0);
-                visible = cam.contains(bound) != Camera.FrustumIntersect.Outside ? 1 : 0;
-            }
-            if (visible == 0) culled++;
-
-            // instanceCount is the second int in DrawElementsIndirectCommand
-            cmdBuf.putInt(i * stride + 4, visible);
-        }
-
-        cam.setPlaneState(0);
-
-        cmdBuf.position(0);
-        cmdBuf.limit(batch.geometries.size() * stride);
-        batch.commandBuffer.getBufferObject().setData(cmdBuf);
-        batch.commandBuffer.getBufferObject().setUpdateNeeded();
-        return culled;
     }
 
     // --- GeometryGroupNode callbacks ---
@@ -490,6 +463,7 @@ public class MdiNode extends GeometryGroupNode {
 
         MeshCombiner.CombinedMesh combinedMesh;
         IndirectCommandBuffer commandBuffer;
+        ByteBuffer originalCommands;
         BufferObject drawDataSsbo;
         ByteBuffer drawDataCpu;
         MdiGeometry mdiGeometry;

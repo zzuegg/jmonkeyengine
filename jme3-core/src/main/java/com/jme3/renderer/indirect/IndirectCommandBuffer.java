@@ -78,6 +78,7 @@ public class IndirectCommandBuffer {
     private final DrawType drawType;
     private final BufferObject bufferObject;
     private int commandCount;
+    private int visibleCount = -1;
     private ByteBuffer cpuBuffer;
 
     /**
@@ -249,6 +250,21 @@ public class IndirectCommandBuffer {
      */
     public int getCommandCount() {
         return commandCount;
+    }
+
+    /**
+     * Returns the number of visible commands after CPU culling,
+     * or -1 if no culling has been performed.
+     */
+    public int getVisibleCount() {
+        return visibleCount;
+    }
+
+    /**
+     * Sets the number of visible commands after CPU culling.
+     */
+    public void setVisibleCount(int count) {
+        this.visibleCount = count;
     }
 
     /**
