@@ -1,0 +1,23 @@
+MaterialDef UnshadedMdi {
+
+    MaterialParameters {
+        Color Color : 1.0 1.0 1.0 1.0
+        Texture2D ColorMap
+        ShaderStorageBufferObject DrawData
+    }
+
+    DrawData {
+        WorldMatrix
+        Color
+        ColorMap
+    }
+
+    Technique {
+        VertexShader GLSL460 : Common/MatDefs/Misc/UnshadedMdi.vert
+        FragmentShader GLSL460 : Common/MatDefs/Misc/UnshadedMdi.frag
+
+        WorldParameters {
+            ViewProjectionMatrix
+        }
+    }
+}
